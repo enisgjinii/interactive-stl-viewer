@@ -109,9 +109,38 @@ export function Sidebar({
   const handleScanSelect = (scanId: string) => {
     if (onScanSelect) {
       onScanSelect(scanId)
+      // Load the corresponding STL file for the selected scan
+      const scanNumber = scanId.replace("scan", "")
+      const scanFileName = `Test Scan ${scanNumber}.stl`
+      const scanPath = `/models/${scanFileName}`
+      
+      // Create a fetch request to get the file
+      fetch(scanPath)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to load scan file: ${response.statusText}`)
+          }
+          return response.blob()
+        })
+        .then(blob => {
+          const scanFile = new File([blob], scanFileName, { type: 'application/octet-stream' })
+          // Update the file to trigger model reload
+          const event = { target: { files: [scanFile] } } as unknown as React.ChangeEvent<HTMLInputElement>
+          // @ts-ignore - we know this exists
+          window.handleFileChange?.(event)
+        })
+        .catch(error => {
+          console.error('Error loading scan file:', error)
+          toast({
+            title: "Error",
+            description: "Failed to load scan file",
+            variant: "destructive",
+          })
+        })
+
       toast({
         title: "Scan Selected",
-        description: `Loaded Test Scan ${scanId.replace("scan", "")}`,
+        description: `Loading Test Scan ${scanNumber}...`,
       })
     }
   }
@@ -128,24 +157,28 @@ export function Sidebar({
         transform transition-transform duration-300 ease-in-out z-50 lg:z-auto
         ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         ${!isOpen ? "lg:w-0 lg:overflow-hidden" : ""}
+        border-r border-gray-100
       `}
       >
-        <div className="h-full overflow-y-auto p-4 space-y-4">
+        <div className="h-full overflow-y-auto p-4 space-y-6">
           {/* Close button for mobile */}
           <div className="lg:hidden flex justify-end mb-2">
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-gray-100">
               <X className="w-5 h-5" />
             </Button>
           </div>
 
           {/* Scan Selection */}
-          <Card className="border-2 border-gray-100 hover:border-blue-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-blue-50">
-              <CardTitle className="text-sm font-semibold text-gray-800">Scan Selection</CardTitle>
+          <Card className="border border-gray-100 hover:border-blue-200 transition-all duration-200 hover:shadow-md">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-t-lg">
+              <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span>Scan Selection</span>
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <Select onValueChange={handleScanSelect} aria-label="Select Test Scan">
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full hover:border-blue-300 transition-colors">
                   <SelectValue placeholder="Select Test Scan" />
                 </SelectTrigger>
                 <SelectContent>
@@ -159,20 +192,20 @@ export function Sidebar({
           </Card>
 
           {/* 3D Controls */}
-          <Card className="border-2 border-gray-100 hover:border-orange-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50">
+          <Card className="border border-gray-100 hover:border-orange-200 transition-all duration-200 hover:shadow-md">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50 rounded-t-lg">
               <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
                 <Move3D className="w-4 h-4 text-orange-500" />
                 <span>3D Controls</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2">
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onCameraReset}
-                  className="hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                  className="hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300 transition-all duration-200"
                   title="Reset Camera"
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
@@ -182,7 +215,7 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onZoomIn}
-                  className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                  className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200"
                   title="Zoom In"
                 >
                   <ZoomIn className="w-4 h-4 mr-2" />
@@ -192,7 +225,7 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onZoomOut}
-                  className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                  className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200"
                   title="Zoom Out"
                 >
                   <ZoomOut className="w-4 h-4 mr-2" />
@@ -202,7 +235,7 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onToggleFullscreen}
-                  className="hover:bg-green-50 hover:text-green-600 transition-colors"
+                  className="hover:bg-green-50 hover:text-green-600 hover:border-green-300 transition-all duration-200"
                   title="Toggle Fullscreen"
                 >
                   <Maximize2 className="w-4 h-4 mr-2" />
@@ -212,8 +245,10 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onToggleGrid}
-                  className={`transition-colors ${
-                    settings?.showGrid ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "hover:bg-gray-50"
+                  className={`transition-all duration-200 ${
+                    settings?.showGrid 
+                      ? "bg-blue-50 text-blue-600 border-blue-300 hover:bg-blue-100" 
+                      : "hover:bg-gray-50 hover:border-gray-300"
                   }`}
                   title="Toggle Grid"
                 >
@@ -224,8 +259,10 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onToggleAxes}
-                  className={`transition-colors ${
-                    settings?.showAxes ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "hover:bg-gray-50"
+                  className={`transition-all duration-200 ${
+                    settings?.showAxes 
+                      ? "bg-purple-50 text-purple-600 border-purple-300 hover:bg-purple-100" 
+                      : "hover:bg-gray-50 hover:border-gray-300"
                   }`}
                   title="Toggle Axes"
                 >
@@ -246,151 +283,83 @@ export function Sidebar({
           </Card>
 
           {/* Session Stats */}
-          <Card className="border-2 border-gray-100 hover:border-green-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-green-50">
+          <Card className="border border-gray-100 hover:border-green-200 transition-all duration-200 hover:shadow-md">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-green-50 rounded-t-lg">
               <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-green-500" />
                 <span>Session Stats</span>
-                {selectedPoints.length > 0 && <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
+                {selectedPoints.length > 0 && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                )}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <div>
-                Points: <span className="font-mono text-orange-600">{selectedPoints.length}</span>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <span className="text-gray-600">Points:</span>
+                <Badge variant="outline" className="font-mono text-orange-600">
+                  {selectedPoints.length}
+                </Badge>
               </div>
-              <div>
-                File: <span className="font-mono text-blue-600">{uploadedFile ? "Loaded" : "Demo"}</span>
+              <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <span className="text-gray-600">File:</span>
+                <Badge variant="outline" className="font-mono text-blue-600">
+                  {uploadedFile ? "Loaded" : "Demo"}
+                </Badge>
               </div>
               {matchedShapes.length > 0 && (
-                <div>
-                  Matches: <span className="font-mono text-green-600">{matchedShapes.length}</span>
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <span className="text-gray-600">Matches:</span>
+                  <Badge variant="outline" className="font-mono text-green-600">
+                    {matchedShapes.length}
+                  </Badge>
                 </div>
               )}
               {!isMobile && (
                 <>
-                  <div>
-                    Type: <span className="font-mono text-purple-600">{exportType}</span>
+                  <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <span className="text-gray-600">Type:</span>
+                    <Badge variant="outline" className="font-mono text-purple-600">
+                      {exportType}
+                    </Badge>
                   </div>
-                  <div>
-                    Quality: <span className="font-mono text-green-600">{settings?.renderQuality || "medium"}</span>
+                  <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <span className="text-gray-600">Quality:</span>
+                    <Badge variant="outline" className="font-mono text-green-600">
+                      {settings?.renderQuality || "medium"}
+                    </Badge>
                   </div>
                 </>
               )}
             </CardContent>
           </Card>
 
-          {/* File Information */}
-          {uploadedFile && (
-            <Card className="border-2 border-gray-100 hover:border-blue-200 transition-colors">
-              <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-blue-50">
-                <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
-                  <FileText className="w-4 h-4" />
-                  <span>Current File</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-gray-600 font-medium">Filename:</span>
-                  <span className="font-mono text-xs truncate max-w-32" title={uploadedFile.name}>
-                    {uploadedFile.name}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-gray-600 font-medium">Size:</span>
-                  <Badge variant="outline">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</Badge>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-gray-600 font-medium">Type:</span>
-                  <Badge variant="outline">STL</Badge>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-gray-600 font-medium">Status:</span>
-                  <Badge className="bg-green-100 text-green-800">Loaded</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Patient Info */}
-          <Card className="border-2 border-gray-100 hover:border-orange-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50">
-              <CardTitle className="text-sm font-semibold text-gray-800">Patient Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-gray-600 font-medium">Case ID:</span>
-                <Badge variant="outline" className="font-mono">
-                  157729
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-gray-600 font-medium">Patient Initial:</span>
-                <Badge variant="outline">TP</Badge>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-gray-600 font-medium">Patient Number:</span>
-                <Badge variant="outline">test</Badge>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-gray-600 font-medium">Session:</span>
-                <Badge variant="outline" className="flex items-center space-x-1">
-                  <Clock className="w-3 h-3" />
-                  <span>Active</span>
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Measurements */}
-          <Card className="border-2 border-gray-100 hover:border-blue-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-blue-50">
-              <CardTitle className="text-sm font-semibold text-gray-800">Measurements</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {[1, 2, 3, 4].map((num) => (
-                <div
-                  key={num}
-                  className="flex items-center space-x-2 text-sm p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
-                >
-                  <span className="w-6 font-semibold text-gray-700">#{num}</span>
-                  <Badge variant="outline" className="text-xs bg-blue-50">
-                    OS
-                  </Badge>
-                  <span className="text-gray-600">x:</span>
-                  <span className="w-8 text-center font-mono">M</span>
-                  <span className="text-gray-600">OL</span>
-                  <select className="text-xs border rounded px-2 py-1 ml-2 bg-white hover:border-orange-300 focus:border-orange-500 focus:outline-none">
-                    <option>UNS</option>
-                    <option>MM</option>
-                    <option>IN</option>
-                  </select>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
           {/* Selected Points */}
-          <Card className="border-2 border-gray-100 hover:border-green-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-green-50">
+          <Card className="border border-gray-100 hover:border-green-200 transition-all duration-200 hover:shadow-md">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-green-50 rounded-t-lg">
               <CardTitle className="text-sm flex items-center justify-between font-semibold text-gray-800">
-                Selected Points
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                  {selectedPoints.length}
-                </Badge>
+                <div className="flex items-center space-x-2">
+                  <span>Selected Points</span>
+                  {selectedPoints.length > 0 && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      {selectedPoints.length}
+                    </Badge>
+                  )}
+                </div>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="pt-4 space-y-4">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleClearAll}
-                className="w-full text-xs hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-colors"
+                className="w-full text-xs hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200"
                 disabled={selectedPoints.length === 0}
               >
                 <Trash2 className="w-3 h-3 mr-2" />
                 Clear all points ({selectedPoints.length})
               </Button>
 
-              <div className="max-h-40 overflow-y-auto space-y-2">
+              <div className="max-h-40 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                 {selectedPoints.length === 0 ? (
                   <div className="text-center text-gray-500 text-xs py-4">
                     Click on the 3D model to add selection points
@@ -399,7 +368,7 @@ export function Sidebar({
                   selectedPoints.map((point, index) => (
                     <div
                       key={point.id}
-                      className="flex items-center justify-between bg-gradient-to-r from-green-50 to-blue-50 p-3 rounded-lg border border-green-200 text-xs"
+                      className="flex items-center justify-between bg-gradient-to-r from-green-50 to-blue-50 p-3 rounded-lg border border-green-200 text-xs hover:shadow-sm transition-all duration-200"
                     >
                       <div>
                         <div className="font-semibold text-gray-800">Point {index + 1}</div>
@@ -413,7 +382,7 @@ export function Sidebar({
                         variant="ghost"
                         size="sm"
                         onClick={() => handleClearPoint(point.id, index)}
-                        className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                        className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </Button>
@@ -425,14 +394,17 @@ export function Sidebar({
           </Card>
 
           {/* Export Options */}
-          <Card className="border-2 border-gray-100 hover:border-orange-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50">
-              <CardTitle className="text-sm font-semibold text-gray-800">Export Configuration</CardTitle>
+          <Card className="border border-gray-100 hover:border-orange-200 transition-all duration-200 hover:shadow-md">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50 rounded-t-lg">
+              <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
+                <Download className="w-4 h-4 text-orange-500" />
+                <span>Export Configuration</span>
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-4 space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg mx-auto mb-2 shadow-md"></div>
+                <div className="text-center group">
+                  <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg mx-auto mb-2 shadow-md group-hover:shadow-lg transition-all duration-200"></div>
                   <label className="flex items-center justify-center space-x-1 text-xs cursor-pointer">
                     <input
                       type="radio"
@@ -444,8 +416,8 @@ export function Sidebar({
                     <span className="font-medium">HS Cap Small</span>
                   </label>
                 </div>
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg mx-auto mb-2 shadow-md"></div>
+                <div className="text-center group">
+                  <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg mx-auto mb-2 shadow-md group-hover:shadow-lg transition-all duration-200"></div>
                   <label className="flex items-center justify-center space-x-1 text-xs cursor-pointer">
                     <input
                       type="radio"
@@ -460,16 +432,16 @@ export function Sidebar({
               </div>
 
               {!canExport && (
-                <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center space-x-2 p-2 bg-yellow-50 rounded-lg text-yellow-800">
                   <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                  <span className="text-xs text-yellow-800">
+                  <span className="text-xs">
                     Upload a file or add selection points to enable export
                   </span>
                 </div>
               )}
 
               <Button
-                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 onClick={handleExportClick}
                 disabled={!canExport}
               >
@@ -478,56 +450,6 @@ export function Sidebar({
               </Button>
             </CardContent>
           </Card>
-
-          {/* Visibility Controls */}
-          <Card className="border-2 border-gray-100 hover:border-purple-200 transition-colors">
-            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-purple-50">
-              <CardTitle className="text-sm font-semibold text-gray-800">Visibility Controls</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {[1, 2, 3, 4].map((num) => (
-                  <div key={num} className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-yellow-200 to-orange-300 rounded border-2 border-orange-400 shadow-sm"></div>
-                    <Button variant="ghost" size="sm" className="p-1 hover:bg-purple-50">
-                      <Eye className="w-4 h-4 text-gray-600" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Settings Summary */}
-          {settings && (
-            <Card className="border-2 border-gray-100 hover:border-indigo-200 transition-colors">
-              <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-indigo-50">
-                <CardTitle className="text-sm font-semibold text-gray-800">Current Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span>Render Quality:</span>
-                  <Badge variant="outline">{settings.renderQuality}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Auto Save:</span>
-                  <Badge variant={settings.autoSave ? "default" : "secondary"}>
-                    {settings.autoSave ? "On" : "Off"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Units:</span>
-                  <Badge variant="outline">{settings.units}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Grid:</span>
-                  <Badge variant={settings.showGrid ? "default" : "secondary"}>
-                    {settings.showGrid ? "Visible" : "Hidden"}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </>

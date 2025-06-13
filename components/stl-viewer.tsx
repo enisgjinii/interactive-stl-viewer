@@ -77,11 +77,13 @@ function STLModel({
     let isMounted = true
 
     try {
+      console.log('Loading STL from URL:', url) // Debug log
       const geometry = await new Promise<THREE.BufferGeometry>((resolve, reject) => {
         loader.load(
           url,
           (geometry) => {
             if (isMounted) {
+              console.log('STL loaded successfully') // Debug log
               setLoadingProgress(100)
               resolve(geometry)
             }
@@ -89,6 +91,7 @@ function STLModel({
           (progress) => {
             if (isMounted && progress.total > 0) {
               const percent = Math.round((progress.loaded / progress.total) * 100)
+              console.log('Loading progress:', percent) // Debug log
               setLoadingProgress(percent)
             }
           },
@@ -107,6 +110,7 @@ function STLModel({
         })
       }
     } catch (err) {
+      console.error('STL loading error:', err) // Debug log
       if (isMounted) {
         setError(err instanceof Error ? err.message : "Failed to load STL file")
         toast({
@@ -123,7 +127,10 @@ function STLModel({
   }
 
   useEffect(() => {
-    loadSTL()
+    if (url) {
+      console.log('URL changed, reloading STL') // Debug log
+      loadSTL()
+    }
   }, [url])
 
   const handleClick = useCallback(
