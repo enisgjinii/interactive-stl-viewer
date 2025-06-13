@@ -37,114 +37,236 @@ export interface ExportConfig {
 
 // Shape library - predefined dental components
 const DENTAL_SHAPES = {
-  "hs-cap-small": {
+  'end cube': {
     vertices: new Float32Array([
-      // Simplified crown geometry for HS Cap Small
-      -0.4,
-      0,
-      -0.4,
-      0.4,
-      0,
-      -0.4,
-      0.4,
-      0,
-      0.4,
-      -0.4,
-      0,
-      0.4, // base
-      -0.3,
-      1.2,
-      -0.3,
-      0.3,
-      1.2,
-      -0.3,
-      0.3,
-      1.2,
-      0.3,
-      -0.3,
-      1.2,
-      0.3, // top
-      -0.2,
-      1.8,
-      -0.2,
-      0.2,
-      1.8,
-      -0.2,
-      0.2,
-      1.8,
-      0.2,
-      -0.2,
-      1.8,
-      0.2, // crown
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices
+      -0.5, 1, -0.5,
+      0.5, 1, -0.5,
+      0.5, 1, 0.5,
+      -0.5, 1, 0.5,
     ]),
     faces: new Uint32Array([
-      // Base faces
+      // Bottom face
       0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
       // Side faces
-      0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
-      // Top transition
-      4, 8, 9, 4, 9, 5, 5, 9, 10, 5, 10, 6, 6, 10, 11, 6, 11, 7, 7, 11, 8, 7, 8, 4,
-      // Crown top
-      8, 9, 10, 8, 10, 11,
-    ]),
-    boundingBox: {
-      min: [-0.4, 0, -0.4],
-      max: [0.4, 1.8, 0.4],
-    },
-  },
-  "hs-cap": {
-    vertices: new Float32Array([
-      // Simplified crown geometry for HS Cap (larger)
-      -0.5,
-      0,
-      -0.5,
-      0.5,
-      0,
-      -0.5,
-      0.5,
-      0,
-      0.5,
-      -0.5,
-      0,
-      0.5, // base
-      -0.4,
-      1.5,
-      -0.4,
-      0.4,
-      1.5,
-      -0.4,
-      0.4,
-      1.5,
-      0.4,
-      -0.4,
-      1.5,
-      0.4, // top
-      -0.25,
-      2.2,
-      -0.25,
-      0.25,
-      2.2,
-      -0.25,
-      0.25,
-      2.2,
-      0.25,
-      -0.25,
-      2.2,
-      0.25, // crown
-    ]),
-    faces: new Uint32Array([
-      // Base faces
-      0, 1, 2, 0, 2, 3,
-      // Side faces
-      0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
-      // Top transition
-      4, 8, 9, 4, 9, 5, 5, 9, 10, 5, 10, 6, 6, 10, 11, 6, 11, 7, 7, 11, 8, 7, 8, 4,
-      // Crown top
-      8, 9, 10, 8, 10, 11,
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
     ]),
     boundingBox: {
       min: [-0.5, 0, -0.5],
-      max: [0.5, 2.2, 0.5],
+      max: [0.5, 1, 0.5],
+    },
+  },
+  'end flat': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices
+      -0.5, 0.2, -0.5,
+      0.5, 0.2, -0.5,
+      0.5, 0.2, 0.5,
+      -0.5, 0.2, 0.5,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 0.2, 0.5],
+    },
+  },
+  'end sphere': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices (spherical cap)
+      -0.5, 0.5, -0.5,
+      0.5, 0.5, -0.5,
+      0.5, 0.5, 0.5,
+      -0.5, 0.5, 0.5,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 0.5, 0.5],
+    },
+  },
+  'long cone': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices (cone)
+      -0.2, 1.5, -0.2,
+      0.2, 1.5, -0.2,
+      0.2, 1.5, 0.2,
+      -0.2, 1.5, 0.2,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 1.5, 0.5],
+    },
+  },
+  'long iso': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices
+      -0.3, 1.2, -0.3,
+      0.3, 1.2, -0.3,
+      0.3, 1.2, 0.3,
+      -0.3, 1.2, 0.3,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 1.2, 0.5],
+    },
+  },
+  'mid cube': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices
+      -0.5, 0.8, -0.5,
+      0.5, 0.8, -0.5,
+      0.5, 0.8, 0.5,
+      -0.5, 0.8, 0.5,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 0.8, 0.5],
+    },
+  },
+  'mid cylinder': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices
+      -0.5, 0.8, -0.5,
+      0.5, 0.8, -0.5,
+      0.5, 0.8, 0.5,
+      -0.5, 0.8, 0.5,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 0.8, 0.5],
+    },
+  },
+  'mid sphere': {
+    vertices: new Float32Array([
+      // Base vertices
+      -0.5, 0, -0.5,
+      0.5, 0, -0.5,
+      0.5, 0, 0.5,
+      -0.5, 0, 0.5,
+      // Top vertices (spherical cap)
+      -0.5, 0.4, -0.5,
+      0.5, 0.4, -0.5,
+      0.5, 0.4, 0.5,
+      -0.5, 0.4, 0.5,
+    ]),
+    faces: new Uint32Array([
+      // Bottom face
+      0, 1, 2, 0, 2, 3,
+      // Top face
+      4, 6, 5, 4, 7, 6,
+      // Side faces
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0,
+    ]),
+    boundingBox: {
+      min: [-0.5, 0, -0.5],
+      max: [0.5, 0.4, 0.5],
     },
   },
 }

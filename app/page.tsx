@@ -166,30 +166,33 @@ export default function Home() {
   )
 
   const handlePointSelect = useCallback(
-    (point: { id: string; position: [number, number, number] }) => {
-      const newPoint = { ...point, type: exportType, timestamp: Date.now() }
+    (point: Point) => {
+      // Cycle through available model types
+      const modelTypes = [
+        'end cube',
+        'end flat',
+        'end sphere',
+        'long cone',
+        'long iso',
+        'mid cube',
+        'mid cylinder',
+        'mid sphere'
+      ]
+      
       setSelectedPoints((prevPoints) => {
+        const newPoint = {
+          ...point,
+          type: modelTypes[prevPoints.length % modelTypes.length],
+          timestamp: Date.now(),
+        }
         const updated = [...prevPoints, newPoint]
-
-        // Auto-save points if enabled
         if (settings.autoSave) {
           localStorage.setItem("scan-ladder-points", JSON.stringify(updated))
         }
-
         return updated
       })
-
-      toast({
-        title: "Point Added",
-        description: `Selection point ${selectedPoints.length + 1} placed at (${point.position.map((p) => p.toFixed(2)).join(", ")})`,
-      })
-
-      // Auto-open mobile bottom sheet when point is added on mobile
-      if (isMobile) {
-        setTimeout(() => setMobileBottomSheetOpen(true), 500)
-      }
     },
-    [exportType, toast, selectedPoints.length, isMobile, settings.autoSave],
+    [settings.autoSave]
   )
 
   const clearAllPoints = useCallback(() => {

@@ -11,7 +11,7 @@ export interface ExportOptions {
 export interface Point {
   id: string
   position: [number, number, number]
-  type: string
+  type: 'end cube' | 'end flat' | 'end sphere' | 'long cone' | 'long iso' | 'mid cube' | 'mid cylinder' | 'mid sphere'
   timestamp: number
 }
 

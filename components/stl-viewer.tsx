@@ -268,7 +268,7 @@ function MatchedShapes({
   )
 }
 
-function CylinderMockups({
+function ModelMockups({
   selectedPoints,
   exportType,
   isMobile,
@@ -279,24 +279,63 @@ function CylinderMockups({
   isMobile: boolean
   settings: any
 }) {
+  const [modelGeometries, setModelGeometries] = useState<{ [key: string]: THREE.BufferGeometry }>({})
+  const loader = new STLLoader()
+
+  useEffect(() => {
+    // Load all model geometries
+    const modelTypes = [
+      'end cube',
+      'end flat',
+      'end sphere',
+      'long cone',
+      'long iso',
+      'mid cube',
+      'mid cylinder',
+      'mid sphere'
+    ]
+
+    modelTypes.forEach(async (type) => {
+      try {
+        const geometry = await loader.loadAsync(`/models/${type}.stl`)
+        // Center the geometry
+        geometry.center()
+        // Scale down the geometry
+        const scale = 0.15 // Adjust this value to make models smaller or larger
+        geometry.scale(scale, scale, scale)
+        setModelGeometries(prev => ({
+          ...prev,
+          [type]: geometry
+        }))
+      } catch (error) {
+        console.error(`Failed to load model: ${type}`, error)
+      }
+    })
+  }, [])
+
   return (
     <>
       {selectedPoints.map((point, index) => {
-        const isSmallCap = point.type === "hs-cap-small"
-        const scale = (isSmallCap ? 0.8 : 1.0) * (settings?.pointSize || 1.0)
-        const color = isSmallCap ? "#fbbf24" : "#f97316"
+        const modelType = point.type
+        const geometry = modelGeometries[modelType]
+        const scale = 1.0 // Base scale is now 1 since we scaled the geometry during loading
+        const color = "#e8c4a0"
+
+        if (!geometry) {
+          return null // Skip rendering if geometry isn't loaded yet
+        }
+
+        // Calculate position to stick to surface
+        const position = [...point.position]
+        // Adjust Y position to stick to surface (subtract half the model height)
+        position[1] -= 0.075 // Adjust this value based on your model heights
 
         return (
-          <group key={point.id} position={point.position} scale={scale}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.3, 0.3, 0.8, 8]} />
-              <meshStandardMaterial color="#4a5568" roughness={0.3} metalness={0.7} />
+          <group key={point.id} position={position} scale={scale}>
+            <mesh geometry={geometry} castShadow receiveShadow>
+              <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
             </mesh>
-            <mesh position={[0, 0.5, 0]} castShadow>
-              <cylinderGeometry args={[0.2, 0.2, 0.3, 8]} />
-              <meshStandardMaterial color={color} roughness={0.2} metalness={0.8} />
-            </mesh>
-            <Html distanceFactor={isMobile ? 20 : 15} position={[0, 1.2, 0]}>
+            <Html distanceFactor={isMobile ? 20 : 15} position={[0, 0.2, 0]}>
               <div
                 className={`bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold shadow-lg transform transition-all hover:scale-105 ${
                   isMobile ? "px-2 py-1 text-xs" : "px-3 py-1 text-xs"
@@ -625,7 +664,7 @@ export function STLViewer({
               <DefaultScene isMobile={isMobile} settings={settings} />
             )}
             {selectedPoints.length > 0 && (
-              <CylinderMockups
+              <ModelMockups
                 selectedPoints={selectedPoints}
                 exportType={exportType}
                 isMobile={isMobile}
