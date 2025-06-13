@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Settings, Monitor, Palette, Globe, Zap, Save, RotateCcw } from "lucide-react"
+import { Settings, Monitor, Palette, Globe, Zap, Save, RotateCcw, Info } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { AppSettings } from "@/app/page"
 
 interface SettingsModalProps {
@@ -19,6 +20,24 @@ interface SettingsModalProps {
   settings: AppSettings
   onUpdateSettings: (settings: Partial<AppSettings>) => void
   isMobile: boolean
+}
+
+interface BadgeProps {
+  variant?: "default" | "secondary" | "outline"
+  className?: string
+  children: React.ReactNode
+}
+
+const Badge: React.FC<BadgeProps> = ({ variant = "default", className = "", children }) => {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+      variant === "default" ? "bg-primary text-primary-foreground hover:bg-primary/80" :
+      variant === "secondary" ? "bg-secondary text-secondary-foreground hover:bg-secondary/80" :
+      "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+    } ${className}`}>
+      {children}
+    </span>
+  )
 }
 
 export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isMobile }: SettingsModalProps) {
@@ -62,97 +81,12 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
           <DialogDescription>Customize your Scan Ladder experience</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="display" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="display">Display</TabsTrigger>
+        <Tabs defaultValue="performance" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="performance">Performance</TabsTrigger>
+            <TabsTrigger value="display">Display</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="display" className="space-y-4">
-            {/* Display Settings */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center space-x-2">
-                  <Monitor className="w-4 h-4" />
-                  <span>Display Options</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Show Grid</Label>
-                    <p className="text-xs text-gray-600">Display reference grid in 3D viewer</p>
-                  </div>
-                  <Switch
-                    checked={tempSettings.showGrid}
-                    onCheckedChange={(checked) => updateTempSetting("showGrid", checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Show Axes</Label>
-                    <p className="text-xs text-gray-600">Display coordinate axes</p>
-                  </div>
-                  <Switch
-                    checked={tempSettings.showAxes}
-                    onCheckedChange={(checked) => updateTempSetting("showAxes", checked)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-medium">Theme</Label>
-                  <Select value={tempSettings.theme} onValueChange={(value) => updateTempSetting("theme", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="dark">Dark</SelectItem>
-                      <SelectItem value="auto">Auto (System)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-medium">Background Color</Label>
-                  <div className="flex space-x-2">
-                    {["#f8fafc", "#1e293b", "#0f172a", "#fef3c7", "#ecfdf5"].map((color) => (
-                      <button
-                        key={color}
-                        className={`w-8 h-8 rounded-full border-2 ${
-                          tempSettings.backgroundColor === color ? "border-blue-500" : "border-gray-300"
-                        }`}
-                        style={{ backgroundColor: color }}
-                        onClick={() => updateTempSetting("backgroundColor", color)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-medium">Point Size</Label>
-                  <div className="px-2">
-                    <Slider
-                      value={[tempSettings.pointSize]}
-                      onValueChange={([value]) => updateTempSetting("pointSize", value)}
-                      max={3}
-                      min={0.5}
-                      step={0.1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>Small</span>
-                      <span>{tempSettings.pointSize.toFixed(1)}x</span>
-                      <span>Large</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="performance" className="space-y-4">
             {/* Performance Settings */}
@@ -165,7 +99,19 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="font-medium">Render Quality</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Render Quality</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Higher quality means better visuals but may impact performance</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Select
                     value={tempSettings.renderQuality}
                     onValueChange={(value) => updateTempSetting("renderQuality", value)}
@@ -200,15 +146,22 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-600">
-                    {tempSettings.renderQuality === "low" && "Optimized for older devices and better performance"}
-                    {tempSettings.renderQuality === "medium" && "Good balance of quality and performance"}
-                    {tempSettings.renderQuality === "high" && "Best visual quality, may impact performance"}
-                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-medium">Animation Speed</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Animation Speed</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Adjust how fast animations and transitions play</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="px-2">
                     <Slider
                       value={[tempSettings.animationSpeed]}
@@ -239,6 +192,115 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
             </Card>
           </TabsContent>
 
+          <TabsContent value="display" className="space-y-4">
+            {/* Display Settings */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center space-x-2">
+                  <Monitor className="w-4 h-4" />
+                  <span>Display Options</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="font-medium">Show Grid</Label>
+                    <p className="text-xs text-gray-600">Display reference grid in 3D viewer</p>
+                  </div>
+                  <Switch
+                    checked={tempSettings.showGrid}
+                    onCheckedChange={(checked) => updateTempSetting("showGrid", checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="font-medium">Show Axes</Label>
+                    <p className="text-xs text-gray-600">Display coordinate axes</p>
+                  </div>
+                  <Switch
+                    checked={tempSettings.showAxes}
+                    onCheckedChange={(checked) => updateTempSetting("showAxes", checked)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Theme</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Choose your preferred color scheme</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Select value={tempSettings.theme} onValueChange={(value) => updateTempSetting("theme", value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="auto">Auto (System)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="font-medium">Background Color</Label>
+                  <div className="flex space-x-2">
+                    {["#f8fafc", "#1e293b", "#0f172a", "#fef3c7", "#ecfdf5"].map((color) => (
+                      <button
+                        key={color}
+                        className={`w-8 h-8 rounded-full border-2 ${
+                          tempSettings.backgroundColor === color ? "border-blue-500" : "border-gray-300"
+                        }`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => updateTempSetting("backgroundColor", color)}
+                        title={`Set background color to ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Point Size</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Adjust the size of points in the 3D viewer</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <div className="px-2">
+                    <Slider
+                      value={[tempSettings.pointSize]}
+                      onValueChange={([value]) => updateTempSetting("pointSize", value)}
+                      max={3}
+                      min={0.5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Small</span>
+                      <span>{tempSettings.pointSize.toFixed(1)}x</span>
+                      <span>Large</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="general" className="space-y-4">
             {/* General Settings */}
             <Card>
@@ -261,7 +323,19 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-medium">Language</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Language</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Select your preferred language</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Select value={tempSettings.language} onValueChange={(value) => updateTempSetting("language", value)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -277,7 +351,19 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-medium">Default Units</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Default Units</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-4 h-4 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Set your preferred measurement units</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Select value={tempSettings.units} onValueChange={(value) => updateTempSetting("units", value)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -286,69 +372,6 @@ export function SettingsModal({ isOpen, onClose, settings, onUpdateSettings, isM
                       <SelectItem value="mm">Millimeters (mm)</SelectItem>
                       <SelectItem value="cm">Centimeters (cm)</SelectItem>
                       <SelectItem value="inches">Inches (in)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="advanced" className="space-y-4">
-            {/* Advanced Settings */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center space-x-2">
-                  <Palette className="w-4 h-4" />
-                  <span>Advanced Options</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <h4 className="font-medium text-yellow-800 mb-1">⚠️ Advanced Settings</h4>
-                  <p className="text-xs text-yellow-700">
-                    These settings may affect application performance and stability. Change only if you know what you're
-                    doing.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <Label className="font-medium">Debug Mode</Label>
-                      <p className="text-xs text-gray-600">Show debug information and logs</p>
-                    </div>
-                    <Switch />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <Label className="font-medium">Hardware Acceleration</Label>
-                      <p className="text-xs text-gray-600">Use GPU for 3D rendering</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <Label className="font-medium">Experimental Features</Label>
-                      <p className="text-xs text-gray-600">Enable beta features</p>
-                    </div>
-                    <Switch />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-medium">Memory Usage Limit</Label>
-                  <Select defaultValue="auto">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="512mb">512 MB</SelectItem>
-                      <SelectItem value="1gb">1 GB</SelectItem>
-                      <SelectItem value="2gb">2 GB</SelectItem>
-                      <SelectItem value="unlimited">Unlimited</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

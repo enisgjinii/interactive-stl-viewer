@@ -1,13 +1,22 @@
 "use client"
 
+import React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, X, Download, Eye, AlertTriangle, FileText, Clock } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Trash2, X, Download, Eye, EyeOff, AlertTriangle, FileText, Clock, RotateCcw, ZoomIn, ZoomOut, Maximize2, Grid3X3, Move3D } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
+interface Point {
+  id: string
+  position: [number, number, number]
+  type: string
+  timestamp: number
+}
+
 interface SidebarProps {
-  selectedPoints: Array<{ id: string; position: [number, number, number]; type: string; timestamp: number }>
+  selectedPoints: Point[]
   onClearAllPoints: () => void
   onClearSelectedPoint: (id: string) => void
   isOpen: boolean
@@ -17,8 +26,24 @@ interface SidebarProps {
   onExport: () => void
   hasFile: boolean
   isMobile: boolean
-  settings: any
+  settings: {
+    renderQuality?: string
+    showGrid?: boolean
+    showAxes?: boolean
+    autoSave?: boolean
+    units?: string
+  }
   uploadedFile: File | null
+  onCameraReset?: () => void
+  onZoomIn?: () => void
+  onZoomOut?: () => void
+  onToggleFullscreen?: () => void
+  onToggleGrid?: () => void
+  onToggleAxes?: () => void
+  onScanSelect?: (scanId: string) => void
+  matchedShapes?: any[]
+  showMatches?: boolean
+  onToggleMatches?: () => void
 }
 
 export function Sidebar({
@@ -34,6 +59,16 @@ export function Sidebar({
   isMobile,
   settings,
   uploadedFile,
+  onCameraReset,
+  onZoomIn,
+  onZoomOut,
+  onToggleFullscreen,
+  onToggleGrid,
+  onToggleAxes,
+  onScanSelect,
+  matchedShapes = [],
+  showMatches = false,
+  onToggleMatches,
 }: SidebarProps) {
   const canExport = hasFile || selectedPoints.length > 0
   const { toast } = useToast()
@@ -71,6 +106,16 @@ export function Sidebar({
     })
   }
 
+  const handleScanSelect = (scanId: string) => {
+    if (onScanSelect) {
+      onScanSelect(scanId)
+      toast({
+        title: "Scan Selected",
+        description: `Loaded Test Scan ${scanId.replace("scan", "")}`,
+      })
+    }
+  }
+
   return (
     <>
       {/* Mobile overlay */}
@@ -92,6 +137,131 @@ export function Sidebar({
               <X className="w-5 h-5" />
             </Button>
           </div>
+
+          {/* Scan Selection */}
+          <Card className="border-2 border-gray-100 hover:border-blue-200 transition-colors">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-blue-50">
+              <CardTitle className="text-sm font-semibold text-gray-800">Scan Selection</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select onValueChange={handleScanSelect} aria-label="Select Test Scan">
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Test Scan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="scan1">Test Scan 1</SelectItem>
+                  <SelectItem value="scan2">Test Scan 2</SelectItem>
+                  <SelectItem value="scan3">Test Scan 3</SelectItem>
+                  <SelectItem value="scan4">Test Scan 4</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          3D Controls
+          <Card className="border-2 border-gray-100 hover:border-orange-200 transition-colors">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50">
+              <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
+                <Move3D className="w-4 h-4 text-orange-500" />
+                <span>3D Controls</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onCameraReset}
+                  className="hover:bg-orange-50 transition-colors"
+                  title="Reset Camera"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onZoomIn}
+                  className="hover:bg-blue-50 transition-colors"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onZoomOut}
+                  className="hover:bg-blue-50 transition-colors"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onToggleFullscreen}
+                  className="hover:bg-green-50 transition-colors"
+                  title="Toggle Fullscreen"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onToggleGrid}
+                  className={`transition-colors ${
+                    settings?.showGrid ? "bg-green-50 hover:bg-green-100" : "hover:bg-gray-50"
+                  }`}
+                  title="Toggle Grid"
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onToggleAxes}
+                  className={`transition-colors ${
+                    settings?.showAxes ? "bg-purple-50 hover:bg-purple-100" : "hover:bg-gray-50"
+                  }`}
+                  title="Toggle Axes"
+                >
+                  {settings?.showAxes ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Session Stats */}
+          <Card className="border-2 border-gray-100 hover:border-green-200 transition-colors">
+            <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-green-50">
+              <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
+                <span>Session Stats</span>
+                {selectedPoints.length > 0 && <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div>
+                Points: <span className="font-mono text-orange-600">{selectedPoints.length}</span>
+              </div>
+              <div>
+                File: <span className="font-mono text-blue-600">{uploadedFile ? "Loaded" : "Demo"}</span>
+              </div>
+              {matchedShapes.length > 0 && (
+                <div>
+                  Matches: <span className="font-mono text-green-600">{matchedShapes.length}</span>
+                </div>
+              )}
+              {!isMobile && (
+                <>
+                  <div>
+                    Type: <span className="font-mono text-purple-600">{exportType}</span>
+                  </div>
+                  <div>
+                    Quality: <span className="font-mono text-green-600">{settings?.renderQuality || "medium"}</span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
           {/* File Information */}
           {uploadedFile && (

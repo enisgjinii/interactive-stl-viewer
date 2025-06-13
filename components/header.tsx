@@ -201,265 +201,96 @@ export function Header({
   }
 
   return (
-    <>
-      <header
-        className={`bg-white shadow-lg border-b border-gray-200 relative z-50 transition-all duration-300 ${
-          isMobile ? "px-3 py-3" : "px-4 md:px-6 py-3 md:py-4"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 md:space-x-4">
-            {/* Mobile/Desktop Toggle */}
-            {isMobile ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleMobileNavClick}
-                className="hover:bg-orange-50 transition-colors p-2"
-              >
-                <Menu className="w-5 h-5 text-orange-600" />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleSidebar}
-                className="lg:flex hidden hover:bg-gray-100 transition-colors"
-              >
-                {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </Button>
-            )}
-
-            {/* Logo */}
-            <div className="flex items-center space-x-2 md:space-x-3">
-              <div className={`relative ${isMobile ? "w-20 h-5" : "w-32 h-8 md:w-40 md:h-10"}`}>
-                <Image
-                  src="/images/scan-ladder-black-logo.png"
-                  alt="Scan Ladder"
-                  fill
-                  className="object-contain"
-                  priority
-                />
-              </div>
-              {isMobile && (
-                <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                  <Smartphone className="w-3 h-3 mr-1" />
-                  Mobile
-                </Badge>
-              )}
-            </div>
-
-            {/* Desktop patient info */}
-            {!isMobile && (
-              <div className="hidden lg:block text-sm text-gray-600 border-l border-gray-300 pl-4">
-                <div className="flex flex-col md:flex-row md:items-center md:space-x-4">
-                  <div>
-                    <span className="font-semibold text-gray-800">Case ID:</span> 157729
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-800">Patient:</span> Test Patient
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-1 md:space-x-2">
-            {/* Status Indicators */}
-            <div className="flex items-center space-x-2 mr-2">
-              {/* Mobile compact indicators */}
-              {isMobile ? (
-                <div className="flex items-center space-x-1">
-                  {uploadedFile && (
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="File loaded" />
-                  )}
-                  {selectedPointsCount > 0 && (
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs px-1.5 py-0.5">
-                      {selectedPointsCount}
-                    </Badge>
-                  )}
-                  {settings?.renderQuality && (
-                    <Badge
-                      variant="outline"
-                      className="bg-purple-50 text-purple-700 border-purple-200 text-xs px-1.5 py-0.5"
-                    >
-                      {settings.renderQuality.charAt(0).toUpperCase()}
-                    </Badge>
-                  )}
-                </div>
-              ) : (
-                /* Desktop detailed indicators */
-                <div className="hidden sm:flex items-center space-x-2">
-                  {uploadedFile ? (
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
-                      <FileText className="w-3 h-3 mr-1" />
-                      {uploadedFile.name.substring(0, 12)}...
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
-                      <AlertCircle className="w-3 h-3 mr-1" />
-                      No file
-                    </Badge>
-                  )}
-
-                  {selectedPointsCount > 0 && (
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-                      {selectedPointsCount} pts
-                    </Badge>
-                  )}
-
-                  <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">
-                    <Monitor className="w-3 h-3 mr-1" />
-                    {settings?.renderQuality || "medium"}
-                  </Badge>
-                </div>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".stl"
-              onChange={handleFileSelect}
-              className="hidden"
-              disabled={isUploading}
-            />
-
-            {/* Upload Button */}
-            <Button
-              variant="outline"
-              size={isMobile ? "sm" : "sm"}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className={`flex items-center space-x-1 md:space-x-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 hover:from-orange-600 hover:to-orange-700 shadow-md hover:shadow-lg transition-all duration-200 ${
-                dragOver ? "ring-2 ring-orange-300 scale-105" : ""
-              } ${isMobile ? "px-3 py-2" : ""} ${isUploading ? "opacity-75" : ""}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {!isMobile && (
-                <span className="hidden sm:inline font-medium">{isUploading ? "Uploading..." : "Upload STL"}</span>
-              )}
-            </Button>
-
-            {/* Action Buttons */}
-            {isMobile ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="hover:bg-gray-50 transition-colors px-3 py-2">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onClick={handleDownload} disabled={!uploadedFile}>
-                    <Download className="w-4 h-4 mr-3" />
-                    <span>Download File</span>
-                    {!uploadedFile && (
-                      <Badge variant="secondary" className="ml-auto text-xs">
-                        N/A
-                      </Badge>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleSettingsClick}>
-                    <Settings className="w-4 h-4 mr-3" />
-                    <span>Settings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleInfoClick}>
-                    <HelpCircle className="w-4 h-4 mr-3" />
-                    <span>Information</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="flex items-center space-x-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hover:bg-gray-50 transition-colors"
-                  onClick={handleDownload}
-                  disabled={!uploadedFile}
-                  title="Download current file"
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hover:bg-gray-50 transition-colors"
-                  onClick={handleSettingsClick}
-                  title="Open settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hover:bg-gray-50 transition-colors"
-                  onClick={handleInfoClick}
-                  title="View information"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Mobile patient info */}
-        {isMobile && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <div className="flex justify-between items-center text-xs text-gray-600">
-              <div className="flex items-center space-x-3">
-                <span>
-                  <strong className="text-gray-800">Case:</strong> 157729
-                </span>
-                <span>
-                  <strong className="text-gray-800">Patient:</strong> TP
-                </span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-green-600 font-medium">Active</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Enhanced Drag and Drop Overlay */}
-      {dragOver && (
-        <div className="fixed inset-0 bg-orange-500/20 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div
-            className={`bg-white rounded-2xl shadow-2xl border-2 border-dashed border-orange-500 ${
-              isMobile ? "p-8 mx-6 max-w-sm" : "p-10 max-w-md"
-            } transform transition-all duration-300 scale-105`}
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200 ${
+        isMobile ? "h-14" : "h-16"
+      }`}
+    >
+      <div className="h-full px-4 flex items-center justify-between">
+        {/* Left section */}
+        <div className="flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size={isMobile ? "sm" : "default"}
+            onClick={onToggleSidebar}
+            className="lg:hidden"
           >
-            <div className="text-center">
-              <div className="relative mb-6">
-                <Upload className={`text-orange-500 mx-auto ${isMobile ? "w-12 h-12" : "w-16 h-16"}`} />
-                <div className="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">+</span>
-                </div>
-              </div>
-              <h3 className={`font-bold mb-3 text-gray-800 ${isMobile ? "text-lg" : "text-xl"}`}>Drop STL File Here</h3>
-              <p className={`text-gray-600 mb-2 ${isMobile ? "text-sm" : ""}`}>Release to upload your 3D model</p>
-              <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
-                <span>Supports:</span>
-                <Badge variant="outline" className="text-xs">
-                  STL
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  ≤50MB
-                </Badge>
-              </div>
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </Button>
+          <div className="flex items-center space-x-2">
+            <FileText className="w-5 h-5 text-blue-500" />
+            <span className={`font-semibold ${isMobile ? "text-sm" : "text-base"}`}>Scan Ladder</span>
+          </div>
+        </div>
+
+        {/* Center section - File upload */}
+        <div
+          className={`flex-1 max-w-2xl mx-4 ${
+            dragOver ? "bg-blue-50" : "bg-gray-50"
+          } rounded-lg transition-colors duration-200`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="relative flex items-center justify-center h-10">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept=".stl"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              title="Upload STL file"
+            />
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              <span>{uploadedFile ? uploadedFile.name : "Drop STL file here or click to upload"}</span>
             </div>
           </div>
         </div>
-      )}
-    </>
+
+        {/* Right section */}
+        <div className="flex items-center space-x-2">
+          {!isMobile && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onSettingsOpen}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <Settings className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onInfoOpen}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </Button>
+            </>
+          )}
+          {isMobile && onMobileNavOpen && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onMobileNavOpen}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </Button>
+          )}
+          {selectedPointsCount > 0 && (
+            <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+              {selectedPointsCount} points
+            </Badge>
+          )}
+        </div>
+      </div>
+    </header>
   )
 }
