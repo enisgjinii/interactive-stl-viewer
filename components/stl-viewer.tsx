@@ -384,12 +384,16 @@ function CameraControls({
   }, [camera, onCameraReset])
 
   const zoomIn = useCallback(() => {
-    camera.position.multiplyScalar(0.8)
+    const factor = 0.8
+    const newPosition = camera.position.clone().multiplyScalar(factor)
+    camera.position.copy(newPosition)
     onZoomIn?.()
   }, [camera, onZoomIn])
 
   const zoomOut = useCallback(() => {
-    camera.position.multiplyScalar(1.2)
+    const factor = 1.2
+    const newPosition = camera.position.clone().multiplyScalar(factor)
+    camera.position.copy(newPosition)
     onZoomOut?.()
   }, [camera, onZoomOut])
 
@@ -435,7 +439,7 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={resetCamera}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-gray-50"
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors"
                   title="Reset Camera"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -444,7 +448,7 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={zoomIn}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-gray-50"
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
                   title="Zoom In"
                 >
                   <ZoomIn className="w-4 h-4" />
@@ -453,7 +457,7 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={zoomOut}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-gray-50"
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
                   title="Zoom Out"
                 >
                   <ZoomOut className="w-4 h-4" />
@@ -462,7 +466,7 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={toggleFullscreen}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-gray-50"
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors"
                   title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
                 >
                   <Maximize2 className="w-4 h-4" />
@@ -471,7 +475,9 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={onToggleGrid}
-                  className={`h-8 w-8 p-0 rounded-lg ${settings?.showGrid ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-gray-50"}`}
+                  className={`h-8 w-8 p-0 rounded-lg transition-colors ${
+                    settings?.showGrid ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "hover:bg-gray-50"
+                  }`}
                   title="Toggle Grid"
                 >
                   <Grid3X3 className="w-4 h-4" />
@@ -480,7 +486,9 @@ function CameraControls({
                   variant="outline"
                   size="sm"
                   onClick={onToggleAxes}
-                  className={`h-8 w-8 p-0 rounded-lg ${settings?.showAxes ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-gray-50"}`}
+                  className={`h-8 w-8 p-0 rounded-lg transition-colors ${
+                    settings?.showAxes ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "hover:bg-gray-50"
+                  }`}
                   title="Toggle Axes"
                 >
                   <Move3D className="w-4 h-4" />
@@ -490,7 +498,9 @@ function CameraControls({
                     variant="outline"
                     size="sm"
                     onClick={onToggleMatches}
-                    className={`h-8 w-8 p-0 rounded-lg ${showMatches ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-gray-50"}`}
+                    className={`h-8 w-8 p-0 rounded-lg transition-colors ${
+                      showMatches ? "bg-green-50 text-green-600 hover:bg-green-100" : "hover:bg-gray-50"
+                    }`}
                     title="Toggle Matches"
                   >
                     <Search className="w-4 h-4" />
@@ -577,13 +587,15 @@ export function STLViewer({
             <OrbitControls
               ref={controlsRef}
               enableDamping
-              dampingFactor={0.05}
-              rotateSpeed={0.5}
+              dampingFactor={0.1}
+              rotateSpeed={0.7}
               minDistance={2}
               maxDistance={20}
               enablePan={true}
               enableZoom={true}
               enableRotate={true}
+              screenSpacePanning={true}
+              target={[0, 0, 0]}
               makeDefault
             />
             <ambientLight intensity={0.5} />

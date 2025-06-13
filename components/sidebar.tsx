@@ -158,7 +158,7 @@ export function Sidebar({
             </CardContent>
           </Card>
 
-          3D Controls
+          {/* 3D Controls */}
           <Card className="border-2 border-gray-100 hover:border-orange-200 transition-colors">
             <CardHeader className="pb-3 bg-gradient-to-r from-gray-50 to-orange-50">
               <CardTitle className="text-sm font-semibold text-gray-800 flex items-center space-x-2">
@@ -172,59 +172,74 @@ export function Sidebar({
                   variant="outline"
                   size="sm"
                   onClick={onCameraReset}
-                  className="hover:bg-orange-50 transition-colors"
+                  className="hover:bg-orange-50 hover:text-orange-600 transition-colors"
                   title="Reset Camera"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <span>Reset</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onZoomIn}
-                  className="hover:bg-blue-50 transition-colors"
+                  className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
                   title="Zoom In"
                 >
-                  <ZoomIn className="w-4 h-4" />
+                  <ZoomIn className="w-4 h-4 mr-2" />
+                  <span>Zoom In</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onZoomOut}
-                  className="hover:bg-blue-50 transition-colors"
+                  className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
                   title="Zoom Out"
                 >
-                  <ZoomOut className="w-4 h-4" />
+                  <ZoomOut className="w-4 h-4 mr-2" />
+                  <span>Zoom Out</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onToggleFullscreen}
-                  className="hover:bg-green-50 transition-colors"
+                  className="hover:bg-green-50 hover:text-green-600 transition-colors"
                   title="Toggle Fullscreen"
                 >
-                  <Maximize2 className="w-4 h-4" />
+                  <Maximize2 className="w-4 h-4 mr-2" />
+                  <span>Fullscreen</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onToggleGrid}
                   className={`transition-colors ${
-                    settings?.showGrid ? "bg-green-50 hover:bg-green-100" : "hover:bg-gray-50"
+                    settings?.showGrid ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "hover:bg-gray-50"
                   }`}
                   title="Toggle Grid"
                 >
-                  <Grid3X3 className="w-4 h-4" />
+                  <Grid3X3 className="w-4 h-4 mr-2" />
+                  <span>Grid</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onToggleAxes}
                   className={`transition-colors ${
-                    settings?.showAxes ? "bg-purple-50 hover:bg-purple-100" : "hover:bg-gray-50"
+                    settings?.showAxes ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "hover:bg-gray-50"
                   }`}
                   title="Toggle Axes"
                 >
-                  {settings?.showAxes ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  {settings?.showAxes ? (
+                    <>
+                      <Eye className="w-4 h-4 mr-2" />
+                      <span>Hide Axes</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-4 h-4 mr-2" />
+                      <span>Show Axes</span>
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
