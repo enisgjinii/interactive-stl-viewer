@@ -15,6 +15,24 @@ export interface Point {
   timestamp: number
 }
 
+// Helper function to get radius based on point type
+function getRadiusForPointType(type: Point['type']): number {
+  switch (type) {
+    case 'end cube':
+    case 'end flat':
+    case 'end sphere':
+      return 0.8
+    case 'long cone':
+    case 'long iso':
+    case 'mid cube':
+    case 'mid cylinder':
+    case 'mid sphere':
+      return 1.0
+    default:
+      return 1.0
+  }
+}
+
 // STL File Generator
 export function generateSTLFile(points: Point[], originalFile: File | null, options: ExportOptions): string {
   const header = "solid ScanLadderExport\n"
@@ -36,7 +54,7 @@ export function generateSTLFile(points: Point[], originalFile: File | null, opti
   if (options.includeCylinders && points.length > 0) {
     points.forEach((point, index) => {
       const [x, y, z] = point.position
-      const radius = point.type === "hs-cap-small" ? 0.8 : 1.0
+      const radius = getRadiusForPointType(point.type)
       const height = 2.0
       const segments = options.quality === "high" ? 16 : options.quality === "medium" ? 12 : 8
 
@@ -132,7 +150,7 @@ export function generateOBJFile(points: Point[], originalFile: File | null, opti
   if (options.includeCylinders && points.length > 0) {
     points.forEach((point, pointIndex) => {
       const [x, y, z] = point.position
-      const radius = point.type === "hs-cap-small" ? 0.8 : 1.0
+      const radius = getRadiusForPointType(point.type)
       const height = 2.0
       const segments = options.quality === "high" ? 16 : options.quality === "medium" ? 12 : 8
 
@@ -210,7 +228,7 @@ export function generatePLYFile(points: Point[], originalFile: File | null, opti
   if (options.includeCylinders && points.length > 0) {
     points.forEach((point) => {
       const [x, y, z] = point.position
-      const radius = point.type === "hs-cap-small" ? 0.8 : 1.0
+      const radius = getRadiusForPointType(point.type)
       const height = 2.0
       const segments = options.quality === "high" ? 16 : options.quality === "medium" ? 12 : 8
 

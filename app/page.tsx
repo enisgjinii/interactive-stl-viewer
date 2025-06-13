@@ -14,7 +14,7 @@ import { MatchingModal } from "@/components/matching-modal"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { generateSTLFile, generateOBJFile, generatePLYFile } from "@/lib/file-generators"
+import { generateSTLFile, generateOBJFile, generatePLYFile, Point } from "@/lib/file-generators"
 import {
   performShapeMatching,
   generateMatchedSceneSTL,
@@ -166,7 +166,7 @@ export default function Home() {
   )
 
   const handlePointSelect = useCallback(
-    (point: Point) => {
+    (point: { id: string; position: [number, number, number]; type: string; timestamp: number }) => {
       // Cycle through available model types
       const modelTypes = [
         'end cube',
@@ -177,22 +177,25 @@ export default function Home() {
         'mid cube',
         'mid cylinder',
         'mid sphere'
-      ]
-      
-      setSelectedPoints((prevPoints) => {
-        const newPoint = {
-          ...point,
-          type: modelTypes[prevPoints.length % modelTypes.length],
-          timestamp: Date.now(),
-        }
-        const updated = [...prevPoints, newPoint]
-        if (settings.autoSave) {
-          localStorage.setItem("scan-ladder-points", JSON.stringify(updated))
-        }
-        return updated
+      ] as const
+
+      // Find current index and get next type
+      const currentIndex = modelTypes.indexOf(point.type as any)
+      const nextIndex = (currentIndex + 1) % modelTypes.length
+      const nextType = modelTypes[nextIndex]
+
+      // Create new point with updated type
+      const updatedPoint: Point = {
+        ...point,
+        type: nextType
+      }
+
+      setSelectedPoints(prev => {
+        const newPoints = prev.filter(p => p.id !== point.id)
+        return [...newPoints, updatedPoint]
       })
     },
-    [settings.autoSave]
+    []
   )
 
   const clearAllPoints = useCallback(() => {

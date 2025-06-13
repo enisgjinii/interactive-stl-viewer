@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Download, FileText, Settings, Layers, Smartphone, Info, Zap, Archive, Globe } from "lucide-react"
 import type { AppSettings } from "@/app/page"
+import { CheckedState } from "@radix-ui/react-checkbox"
 
 interface ExportModalProps {
   isOpen: boolean
@@ -48,7 +49,7 @@ export function ExportModal({
 }: ExportModalProps) {
   const [format, setFormat] = useState<"stl" | "obj" | "ply">("stl")
   const [quality, setQuality] = useState<"low" | "medium" | "high">(isMobile ? "medium" : "high")
-  const [includeOriginal, setIncludeOriginal] = useState(true)
+  const [includeOriginal, setIncludeOriginal] = useState(false)
   const [includeCylinders, setIncludeCylinders] = useState(true)
   const [compression, setCompression] = useState(false)
   const [metadata, setMetadata] = useState(true)
@@ -87,6 +88,14 @@ export function ExportModal({
         return { desc: "Research & analysis", size: "Small", compat: "Limited" }
       default:
         return { desc: "", size: "", compat: "" }
+    }
+  }
+
+  const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<boolean>>) => (checked: CheckedState) => {
+    if (checked === true) {
+      setter(true)
+    } else {
+      setter(false)
     }
   }
 
@@ -269,7 +278,7 @@ export function ExportModal({
                       <Checkbox
                         id="original"
                         checked={includeOriginal}
-                        onCheckedChange={setIncludeOriginal}
+                        onCheckedChange={handleCheckboxChange(setIncludeOriginal)}
                         disabled={!hasOriginalFile}
                       />
                       <div>
@@ -291,7 +300,7 @@ export function ExportModal({
                       <Checkbox
                         id="cylinders"
                         checked={includeCylinders}
-                        onCheckedChange={setIncludeCylinders}
+                        onCheckedChange={handleCheckboxChange(setIncludeCylinders)}
                         disabled={selectedPoints.length === 0}
                       />
                       <div>
@@ -358,7 +367,11 @@ export function ExportModal({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
-                      <Checkbox id="compression" checked={compression} onCheckedChange={setCompression} />
+                      <Checkbox
+                        id="compression"
+                        checked={compression}
+                        onCheckedChange={handleCheckboxChange(setCompression)}
+                      />
                       <div>
                         <Label htmlFor="compression" className="cursor-pointer font-medium">
                           Enable Compression
@@ -371,7 +384,11 @@ export function ExportModal({
 
                   <div className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
-                      <Checkbox id="metadata" checked={metadata} onCheckedChange={setMetadata} />
+                      <Checkbox
+                        id="metadata"
+                        checked={metadata}
+                        onCheckedChange={handleCheckboxChange(setMetadata)}
+                      />
                       <div>
                         <Label htmlFor="metadata" className="cursor-pointer font-medium">
                           Include Metadata

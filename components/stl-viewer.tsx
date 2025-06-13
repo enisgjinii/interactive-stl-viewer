@@ -318,21 +318,18 @@ function ModelMockups({
       {selectedPoints.map((point, index) => {
         const modelType = point.type
         const geometry = modelGeometries[modelType]
-        const scale = 1.0 // Base scale is now 1 since we scaled the geometry during loading
+        const scale = 1.0
         const color = "#e8c4a0"
 
         if (!geometry) {
-          return null // Skip rendering if geometry isn't loaded yet
+          return null
         }
 
-        // Calculate position to stick to surface
-        const position = [...point.position]
-        // Adjust Y position to stick to surface (subtract half the model height)
-        position[1] -= 0.075 // Adjust this value based on your model heights
+        const position = new THREE.Vector3(point.position[0], point.position[1] - 0.075, point.position[2])
 
         return (
           <group key={point.id} position={position} scale={scale}>
-            <mesh geometry={geometry} castShadow receiveShadow>
+            <mesh geometry={geometry} castShadow receiveShadow renderOrder={1}>
               <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
             </mesh>
             <Html distanceFactor={isMobile ? 20 : 15} position={[0, 0.2, 0]}>
