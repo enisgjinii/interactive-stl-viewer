@@ -285,14 +285,14 @@ function ModelMockups({
   useEffect(() => {
     // Load all model geometries
     const modelTypes = [
-      'end cube',
-      'end flat',
-      'end sphere',
-      'long cone',
-      'long iso',
-      'mid cube',
-      'mid cylinder',
-      'mid sphere'
+      'end-cube',
+      'end-flat',
+      'end-sphere',
+      'long-cone',
+      'long-iso',
+      'mid-cube',
+      'mid-cylinder',
+      'mid-sphere'
     ]
 
     modelTypes.forEach(async (type) => {
