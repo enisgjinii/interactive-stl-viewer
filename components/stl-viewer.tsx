@@ -1,7 +1,7 @@
 "use client"
 
 import React, { Suspense, useRef, useState, useEffect, useCallback } from "react"
-import { Canvas, useThree } from "@react-three/fiber"
+import { Canvas, useThree, useFrame } from "@react-three/fiber"
 import { OrbitControls, Environment, Html, Text } from "@react-three/drei"
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js"
 import * as THREE from "three"
@@ -17,6 +17,8 @@ interface Point {
   position: [number, number, number]
   type: string
   timestamp: number
+  rotation?: [number, number, number]
+  modelType?: string
 }
 
 interface STLViewerProps {
@@ -48,12 +50,15 @@ interface STLViewerProps {
 function STLModel({
   url,
   onPointSelect,
+  onPointUpdate,
   settings,
   isMobile,
   onScanSelect,
+  meshRef,
 }: {
   url: string
   onPointSelect: (point: Point) => void
+  onPointUpdate?: (point: Point) => void
   settings: {
     renderQuality?: string
     showGrid?: boolean
@@ -63,12 +68,15 @@ function STLModel({
   }
   isMobile: boolean
   onScanSelect?: (scanId: string) => void
+  meshRef?: React.RefObject<THREE.Mesh>
 }) {
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const [hovered, setHovered] = useState(false)
-  const meshRef = useRef<THREE.Mesh>(null)
+  const [draggingPoint, setDraggingPoint] = useState<string | null>(null)
+  const internalMeshRef = useRef<THREE.Mesh>(null)
+  const actualMeshRef = meshRef || internalMeshRef
   const { camera } = useThree()
   const { toast } = useToast()
 
@@ -135,7 +143,7 @@ function STLModel({
 
   const handleClick = useCallback(
     (event: any) => {
-      if (!meshRef.current || !event.point) return
+      if (!actualMeshRef.current || !event.point) return
 
       const point = event.point
       const id = `point-${Date.now()}`
@@ -153,8 +161,30 @@ function STLModel({
         onScanSelect(id)
       }
     },
-    [onPointSelect, onScanSelect]
+    [onPointSelect, onScanSelect, actualMeshRef]
   )
+
+  const handlePointDragStart = useCallback((pointId: string) => {
+    setDraggingPoint(pointId)
+  }, [])
+
+  const handlePointDragEnd = useCallback(() => {
+    setDraggingPoint(null)
+  }, [])
+
+  const handlePointDrag = useCallback((event: any, pointId: string) => {
+    if (!draggingPoint || !event.point) return
+
+    const point = event.point
+    const position: [number, number, number] = [point.x, point.y, point.z]
+
+    onPointSelect({
+      id: pointId,
+      position,
+      type: "selection",
+      timestamp: Date.now(),
+    })
+  }, [draggingPoint, onPointSelect])
 
   if (error) {
     return (
@@ -202,7 +232,7 @@ function STLModel({
 
   return (
     <mesh
-      ref={meshRef}
+      ref={actualMeshRef}
       geometry={geometry}
       onClick={handleClick}
       onPointerOver={() => setHovered(true)}
@@ -255,7 +285,11 @@ function MatchedShapes({
             <Html position={match.sourcePoint.position} distanceFactor={isMobile ? 25 : 20}>
               <div className="bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1 text-xs font-medium shadow-lg border">
                 <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></div>
+                  <div className={`match-indicator ${
+                    match.matchType === "exact" ? "match-indicator-exact" : 
+                    match.matchType === "approximate" ? "match-indicator-approximate" : 
+                    "match-indicator-similar"
+                  }`}></div>
                   <span>Match {index + 1}</span>
                 </div>
                 <div className="text-xs text-gray-600">{(match.confidence * 100).toFixed(0)}% confidence</div>
@@ -273,53 +307,128 @@ function ModelMockups({
   exportType,
   isMobile,
   settings,
+  onPointSelect,
+  meshRef,
 }: {
-  selectedPoints: Array<{ id: string; position: [number, number, number]; type: string; timestamp: number }>
+  selectedPoints: Array<Point>
   exportType: "hs-cap-small" | "hs-cap"
   isMobile: boolean
   settings: any
+  onPointSelect: (point: Point) => void
+  meshRef?: React.RefObject<THREE.Mesh>
 }) {
   const [modelGeometries, setModelGeometries] = useState<{ [key: string]: THREE.BufferGeometry }>({})
+  const [draggingPoint, setDraggingPoint] = useState<string | null>(null)
+  const [rotatingPoint, setRotatingPoint] = useState<string | null>(null)
+  const [showModelSelector, setShowModelSelector] = useState<string | null>(null)
+  const { camera, raycaster, pointer } = useThree()
   const loader = new STLLoader()
 
-  useEffect(() => {
-    // Load all model geometries
-    const modelTypes = [
-      'end-cube',
-      'end-flat',
-      'end-sphere',
-      'long-cone',
-      'long-iso',
-      'mid-cube',
-      'mid-cylinder',
-      'mid-sphere'
-    ]
+  const availableModels = [
+    { id: 'end-cube', name: 'End Cube' },
+    { id: 'end-flat', name: 'End Flat' },
+    { id: 'end-sphere', name: 'End Sphere' },
+    { id: 'long-cone', name: 'Long Cone' },
+    { id: 'long-iso', name: 'Long ISO' },
+    { id: 'mid-cube', name: 'Mid Cube' },
+    { id: 'mid-cylinder', name: 'Mid Cylinder' },
+    { id: 'mid-sphere', name: 'Mid Sphere' }
+  ]
 
-    modelTypes.forEach(async (type) => {
+  // Handle dragging with proper surface constraint
+  useFrame(() => {
+    if (draggingPoint && meshRef?.current) {
+      raycaster.setFromCamera(pointer, camera)
+      const intersects = raycaster.intersectObject(meshRef.current)
+      
+      if (intersects.length > 0) {
+        const intersection = intersects[0]
+        const newPosition = intersection.point
+        const normal = intersection.face?.normal
+        
+        if (normal) {
+          // Transform local normal to world space
+          const worldNormal = normal.clone().transformDirection(meshRef.current.matrixWorld)
+          
+          // Get camera direction
+          const cameraDirection = new THREE.Vector3()
+          camera.getWorldDirection(cameraDirection)
+          
+          // Check if the intersection point is on a front-facing surface
+          const dotProduct = worldNormal.dot(cameraDirection.negate())
+          
+          if (dotProduct > 0) {
+            // Offset the point slightly above the surface to prevent z-fighting
+            const offsetPosition = newPosition.clone().add(worldNormal.multiplyScalar(0.02))
+            
+            // Update the point
+            const point = selectedPoints.find(p => p.id === draggingPoint)
+            if (point) {
+              onPointSelect({
+                ...point,
+                position: [offsetPosition.x, offsetPosition.y, offsetPosition.z],
+                timestamp: Date.now()
+              })
+            }
+          }
+        }
+      }
+    }
+  })
+
+  useEffect(() => {
+    availableModels.forEach(async (model) => {
       try {
-        const geometry = await loader.loadAsync(`/models/${type}.stl`)
-        // Center the geometry
+        const geometry = await loader.loadAsync(`/models/${model.id}.stl`)
         geometry.center()
-        // Scale down the geometry
-        const scale = 0.15 // Adjust this value to make models smaller or larger
+        const scale = 0.15
         geometry.scale(scale, scale, scale)
         setModelGeometries(prev => ({
           ...prev,
-          [type]: geometry
+          [model.id]: geometry
         }))
       } catch (error) {
-        console.error(`Failed to load model: ${type}`, error)
+        console.error(`Failed to load model: ${model.id}`, error)
       }
     })
   }, [])
 
+  const handleModelChange = (pointId: string, modelType: string) => {
+    const point = selectedPoints.find(p => p.id === pointId)
+    if (point) {
+      onPointSelect({
+        ...point,
+        modelType,
+        timestamp: Date.now()
+      })
+    }
+    setShowModelSelector(null)
+  }
+
+  const handleRotation = (pointId: string, axis: 'x' | 'y' | 'z', delta: number) => {
+    const point = selectedPoints.find(p => p.id === pointId)
+    if (point) {
+      const currentRotation = point.rotation || [0, 0, 0]
+      const newRotation = [...currentRotation] as [number, number, number]
+      const axisIndex = { x: 0, y: 1, z: 2 }[axis]
+      newRotation[axisIndex] = (newRotation[axisIndex] + delta) % (2 * Math.PI)
+      
+      onPointSelect({
+        ...point,
+        rotation: newRotation,
+        timestamp: Date.now()
+      })
+    }
+  }
+
   return (
     <>
       {selectedPoints.map((point, index) => {
-        const modelType = point.type
+        const modelType = point.modelType || point.type
         const geometry = modelGeometries[modelType]
-        const scale = 1.0
-        const color = "#e8c4a0"
+        const scale = draggingPoint === point.id ? 1.2 : 1.0
+        const color = draggingPoint === point.id ? "#ffb366" : "#e8c4a0"
+        const rotation = point.rotation || [0, 0, 0]
 
         if (!geometry) {
           return null
@@ -328,26 +437,118 @@ function ModelMockups({
         const position = new THREE.Vector3(point.position[0], point.position[1] - 0.075, point.position[2])
 
         return (
-          <group key={point.id} position={position} scale={scale}>
+          <group 
+            key={point.id} 
+            position={position}
+            rotation={rotation}
+            scale={scale}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              if (e.button === 0) { // Left click for drag
+                setDraggingPoint(point.id)
+                document.body.style.cursor = 'grabbing'
+              }
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation()
+              setDraggingPoint(null)
+              setRotatingPoint(null)
+              document.body.style.cursor = 'default'
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation()
+              if (!draggingPoint && !rotatingPoint) {
+                document.body.style.cursor = 'grab'
+              }
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation()
+              if (!draggingPoint && !rotatingPoint) {
+                document.body.style.cursor = 'default'
+              }
+            }}
+            onContextMenu={(e) => {
+              e.stopPropagation()
+            }}
+          >
             <mesh geometry={geometry} castShadow receiveShadow renderOrder={1}>
-              <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
+              <meshStandardMaterial 
+                color={color} 
+                roughness={0.3} 
+                metalness={0.1}
+                emissive={draggingPoint === point.id ? "#ffb366" : "#000000"}
+                emissiveIntensity={draggingPoint === point.id ? 0.2 : 0}
+              />
             </mesh>
             <Html distanceFactor={isMobile ? 20 : 15} position={[0, 0.2, 0]}>
-              <div
-                className={`bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold shadow-lg transform transition-all hover:scale-105 ${
-                  isMobile ? "px-2 py-1 text-xs" : "px-3 py-1 text-xs"
-                }`}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Point {index + 1}</span>
+              <div className="flex flex-col items-center space-y-2">
+                <div
+                  className={`bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold shadow-lg transform transition-all hover:scale-105 ${
+                    isMobile ? "px-2 py-1 text-xs" : "px-3 py-1 text-xs"
+                  } ${draggingPoint === point.id ? 'ring-2 ring-orange-300 ring-offset-2' : ''}`}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Point {index + 1}</span>
+                    {!isMobile && (
+                      <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
+                        {modelType}
+                      </Badge>
+                    )}
+                  </div>
                   {!isMobile && (
-                    <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
-                      {point.type}
-                    </Badge>
+                    <div className="text-xs opacity-75 mt-0.5">{new Date(point.timestamp).toLocaleTimeString()}</div>
                   )}
                 </div>
+                
+                {/* Rotation Controls */}
                 {!isMobile && (
-                  <div className="text-xs opacity-75 mt-0.5">{new Date(point.timestamp).toLocaleTimeString()}</div>
+                  <div className="flex space-x-2 bg-white/90 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                    <button
+                      onClick={() => handleRotation(point.id, 'x', Math.PI / 4)}
+                      className="p-1 hover:bg-orange-100 rounded"
+                      title="Rotate X"
+                    >
+                      ↻X
+                    </button>
+                    <button
+                      onClick={() => handleRotation(point.id, 'y', Math.PI / 4)}
+                      className="p-1 hover:bg-orange-100 rounded"
+                      title="Rotate Y"
+                    >
+                      ↻Y
+                    </button>
+                    <button
+                      onClick={() => handleRotation(point.id, 'z', Math.PI / 4)}
+                      className="p-1 hover:bg-orange-100 rounded"
+                      title="Rotate Z"
+                    >
+                      ↻Z
+                    </button>
+                    <button
+                      onClick={() => setShowModelSelector(point.id)}
+                      className="p-1 hover:bg-orange-100 rounded"
+                      title="Change Model"
+                    >
+                      🔄
+                    </button>
+                  </div>
+                )}
+
+                {/* Model Selector */}
+                {showModelSelector === point.id && (
+                  <div className="absolute top-full mt-2 bg-white rounded-lg shadow-xl p-2 z-50">
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableModels.map((model) => (
+                        <button
+                          key={model.id}
+                          onClick={() => handleModelChange(point.id, model.id)}
+                          className="p-2 text-xs hover:bg-orange-100 rounded text-left"
+                        >
+                          {model.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </Html>
@@ -474,7 +675,7 @@ function CameraControls({
           height: "100%",
         }}
       >
-        <div className={`fixed z-10 ${isMobile ? "top-2 right-2" : "top-4 right-4"}`} style={{ pointerEvents: "auto" }}>
+        <div className={`fixed z-10 pointer-events-auto ${isMobile ? "top-2 right-2" : "top-4 right-4"}`}>
           <div className="flex flex-col space-y-2">
             <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-1.5 transition-all duration-300 hover:shadow-xl">
               <div className="flex space-x-1">
@@ -609,6 +810,7 @@ export function STLViewer({
 }: STLViewerProps) {
   const [url, setUrl] = useState<string | null>(null)
   const controlsRef = useRef<any>(null)
+  const meshRef = useRef<THREE.Mesh>(null as any)
 
   useEffect(() => {
     if (file) {
@@ -656,6 +858,7 @@ export function STLViewer({
                 settings={settings} 
                 isMobile={isMobile}
                 onScanSelect={onScanSelect}
+                meshRef={meshRef}
               />
             ) : (
               <DefaultScene isMobile={isMobile} settings={settings} />
@@ -666,6 +869,8 @@ export function STLViewer({
                 exportType={exportType}
                 isMobile={isMobile}
                 settings={settings}
+                onPointSelect={onPointSelect}
+                meshRef={meshRef}
               />
             )}
             {matchedShapes.length > 0 && (

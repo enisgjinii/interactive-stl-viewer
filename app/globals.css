@@ -92,3 +92,30 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom STL Viewer Styles */
+.pointer-events-auto {
+  pointer-events: auto;
+}
+
+.pointer-events-none {
+  pointer-events: none;
+}
+
+.match-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.match-indicator-exact {
+  background-color: #10b981;
+}
+
+.match-indicator-approximate {
+  background-color: #f59e0b;
+}
+
+.match-indicator-similar {
+  background-color: #3b82f6;
+}
