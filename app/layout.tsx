@@ -14,6 +14,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Favicon for light mode */}
+        <link rel="icon" href="/images/scan-ladder-black-logo.png" media="(prefers-color-scheme: light)" />
+        {/* Favicon for dark mode */}
+        <link rel="icon" href="/images/scan-ladder-white-logo.png" media="(prefers-color-scheme: dark)" />
+      </head>
       <body>{children}</body>
     </html>
   )
