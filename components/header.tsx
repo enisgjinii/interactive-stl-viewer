@@ -203,36 +203,38 @@ export function Header({
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200 ${
-        isMobile ? "h-14" : "h-16"
+        isMobile ? "h-12" : "h-14"
       }`}
     >
-      <div className="h-full px-4 flex items-center justify-between">
-        {/* Left section */}
-        <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={onToggleSidebar}
-            className="lg:hidden"
-          >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </Button>
-          <div className="flex items-center space-x-2">
-            <FileText className="w-5 h-5 text-blue-500" />
-            <span className={`font-semibold ${isMobile ? "text-sm" : "text-base"}`}>Scan Ladder</span>
+      <div className="h-full px-3 flex items-center justify-between">
+        {/* Left section - Compact */}
+        <div className="flex items-center space-x-2">
+          {!isMobile && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleSidebar}
+              className="h-8 w-8 p-0"
+            >
+              {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </Button>
+          )}
+          <div className="flex items-center space-x-1">
+            <FileText className="w-4 h-4 text-blue-500" />
+            <span className={`font-semibold ${isMobile ? "text-xs" : "text-sm"}`}>Scan Ladder</span>
           </div>
         </div>
 
-        {/* Center section - File upload */}
+        {/* Center section - Compact file upload */}
         <div
-          className={`flex-1 max-w-2xl mx-4 ${
-            dragOver ? "bg-blue-50" : "bg-gray-50"
-          } rounded-lg transition-colors duration-200`}
+          className={`flex-1 max-w-lg mx-3 ${
+            dragOver ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"
+          } rounded-md border transition-colors duration-200`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="relative flex items-center justify-center h-10">
+          <div className="relative flex items-center justify-center h-8">
             <input
               type="file"
               ref={fileInputRef}
@@ -241,36 +243,57 @@ export function Header({
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               title="Upload STL file"
             />
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <div className="flex items-center space-x-2 text-xs text-gray-600 px-2">
               {isUploading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3 h-3 animate-spin" />
               ) : (
-                <Upload className="w-4 h-4" />
+                <Upload className="w-3 h-3" />
               )}
-              <span>{uploadedFile ? uploadedFile.name : "Drop STL file here or click to upload"}</span>
+              {uploadedFile ? (
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-3 py-1.5 rounded-lg shadow-md flex items-center space-x-2">
+                  <FileText className="w-4 h-4" />
+                  <span className="font-medium text-sm truncate max-w-[150px]">
+                    {uploadedFile.name}
+                  </span>
+                  {uploadedFile.size > 0 && (
+                    <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-xs">
+                      {(uploadedFile.size / 1024 / 1024).toFixed(1)} MB
+                    </Badge>
+                  )}
+                </div>
+              ) : (
+                <span className="truncate">Drop STL or click to upload</span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right section */}
-        <div className="flex items-center space-x-2">
+        {/* Right section - Compact */}
+        <div className="flex items-center space-x-1">
+          {selectedPointsCount > 0 && (
+            <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs px-2 py-0.5">
+              {selectedPointsCount}
+            </Badge>
+          )}
           {!isMobile && (
             <>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onSettingsOpen}
-                className="text-gray-600 hover:text-gray-900"
+                className="h-8 w-8 p-0 text-gray-600 hover:text-gray-900"
+                title="Settings"
               >
-                <Settings className="w-5 h-5" />
+                <Settings className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onInfoOpen}
-                className="text-gray-600 hover:text-gray-900"
+                className="h-8 w-8 p-0 text-gray-600 hover:text-gray-900"
+                title="Info"
               >
-                <HelpCircle className="w-5 h-5" />
+                <HelpCircle className="w-4 h-4" />
               </Button>
             </>
           )}
@@ -279,15 +302,10 @@ export function Header({
               variant="ghost"
               size="sm"
               onClick={onMobileNavOpen}
-              className="text-gray-600 hover:text-gray-900"
+              className="h-8 w-8 p-0 text-gray-600 hover:text-gray-900"
             >
-              <MoreVertical className="w-5 h-5" />
+              <MoreVertical className="w-4 h-4" />
             </Button>
-          )}
-          {selectedPointsCount > 0 && (
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-              {selectedPointsCount} points
-            </Badge>
           )}
         </div>
       </div>

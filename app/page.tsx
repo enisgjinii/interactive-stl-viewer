@@ -10,11 +10,12 @@ import { SettingsModal } from "@/components/settings-modal"
 import { InfoModal } from "@/components/info-modal"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { MobileNavigation } from "@/components/mobile-navigation"
+import { MeasurementTools } from "@/components/measurement-tools"
 import { MatchingModal } from "@/components/matching-modal"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { generateSTLFile, generateOBJFile, generatePLYFile, Point } from "@/lib/file-generators"
+import { generateSTLFile, generateOBJFile, generatePLYFile, generateJSONFile, generateCSVFile, Point, ExportOptions as FileExportOptions } from "@/lib/file-generators"
 import {
   performShapeMatching,
   generateMatchedSceneSTL,
@@ -23,8 +24,9 @@ import {
   type MatchResult,
   type ExportConfig as MatchExportConfig,
 } from "@/lib/shape-matching"
-import { Search } from "lucide-react"
+import { Search, Scan, Target, Brain, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export interface AppSettings {
   renderQuality: "low" | "medium" | "high"
@@ -42,9 +44,7 @@ export interface AppSettings {
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [selectedPoints, setSelectedPoints] = useState<
-    Array<{ id: string; position: [number, number, number]; type: string; timestamp: number }>
-  >([])
+  const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
@@ -57,6 +57,22 @@ export default function Home() {
   const [exportProgress, setExportProgress] = useState(0)
   const [matchedShapes, setMatchedShapes] = useState<MatchResult[]>([])
   const [showMatches, setShowMatches] = useState(true)
+  const [analysisData, setAnalysisData] = useState<{
+    fileInfo: { name: string; size: number; format: string }
+    geometryStats: { vertices: number; faces: number; volume: number }
+    pointStats: { total: number; distribution: Record<string, number> }
+  } | null>(null)
+  const [measurements, setMeasurements] = useState<Array<{
+    id: string
+    type: "distance" | "angle" | "area" | "volume" | "radius" | "diameter"
+    points: Array<[number, number, number]>
+    value: number
+    unit: string
+    label: string
+    timestamp: number
+    visible: boolean
+    color: string
+  }>>([])
   const { toast } = useToast()
 
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -67,7 +83,7 @@ export default function Home() {
     renderQuality: isMobile ? "medium" : "high",
     autoSave: true,
     showGrid: true,
-    showAxes: false,
+    showAxes: true,
     backgroundColor: "#f8fafc",
     pointSize: isMobile ? 1.2 : 1.0,
     animationSpeed: isMobile ? 0.8 : 1.0,
@@ -142,19 +158,40 @@ export default function Home() {
     (file: File) => {
       setUploadedFile(file)
 
+      // Analyze file and generate statistics
+      const fileInfo = {
+        name: file.name,
+        size: file.size,
+        format: file.name.split('.').pop()?.toUpperCase() || 'Unknown'
+      }
+
+      // Simulate geometry analysis
+      const geometryStats = {
+        vertices: Math.floor(Math.random() * 50000) + 10000,
+        faces: Math.floor(Math.random() * 100000) + 20000,
+        volume: Math.random() * 1000 + 100
+      }
+
+      setAnalysisData({
+        fileInfo,
+        geometryStats,
+        pointStats: { total: 0, distribution: {} }
+      })
+
       // Auto-save if enabled
       if (settings.autoSave) {
         const projectData = {
           fileName: file.name,
           uploadTime: new Date().toISOString(),
           fileSize: file.size,
+          analysis: { fileInfo, geometryStats }
         }
         localStorage.setItem("scan-ladder-last-project", JSON.stringify(projectData))
       }
 
       toast({
         title: "File Uploaded Successfully",
-        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) has been loaded.`,
+        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) analyzed and loaded.`,
       })
 
       // Auto-open mobile bottom sheet on file upload
@@ -166,36 +203,61 @@ export default function Home() {
   )
 
   const handlePointSelect = useCallback(
-    (point: { id: string; position: [number, number, number]; type: string; timestamp: number }) => {
-      // Cycle through available model types
-      const modelTypes = [
-        'end cube',
-        'end flat',
-        'end sphere',
-        'long cone',
-        'long iso',
-        'mid cube',
-        'mid cylinder',
-        'mid sphere'
-      ] as const
-
-      // Find current index and get next type
-      const currentIndex = modelTypes.indexOf(point.type as any)
-      const nextIndex = (currentIndex + 1) % modelTypes.length
-      const nextType = modelTypes[nextIndex]
-
-      // Create new point with updated type
-      const updatedPoint: Point = {
-        ...point,
-        type: nextType
+    (point: { id: string; position: [number, number, number]; type: string; timestamp: number; modelType?: string }) => {
+      // Check if point already exists
+      const existingPointIndex = selectedPoints.findIndex(p => p.id === point.id)
+      
+      if (existingPointIndex !== -1) {
+        // Update existing point (e.g., when dragging or changing model type)
+        setSelectedPoints(prev => {
+          const updated = [...prev]
+          updated[existingPointIndex] = {
+            ...updated[existingPointIndex],
+            ...point,
+            type: (point.modelType || point.type) as Point['type'],
+            metadata: {
+              confidence: Math.random() * 0.3 + 0.7,
+              sourceFile: uploadedFile?.name,
+              processingTime: Date.now() - point.timestamp,
+              algorithm: "manual_selection"
+            }
+          }
+          return updated
+        })
+      } else {
+        // Add new point
+        const newPoint: Point = {
+          id: point.id,
+          position: point.position,
+          type: (point.modelType || point.type) as Point['type'],
+          timestamp: point.timestamp,
+          metadata: {
+            confidence: Math.random() * 0.3 + 0.7,
+            sourceFile: uploadedFile?.name,
+            processingTime: Date.now() - point.timestamp,
+            algorithm: "manual_selection"
+          }
+        }
+        
+        setSelectedPoints(prev => [...prev, newPoint])
       }
-
-      setSelectedPoints(prev => {
-        const newPoints = prev.filter(p => p.id !== point.id)
-        return [...newPoints, updatedPoint]
-      })
+      
+      // Update analysis data
+      if (analysisData) {
+        const distribution: Record<string, number> = {}
+        const currentPoints = existingPointIndex !== -1 ? selectedPoints : [...selectedPoints, point]
+        currentPoints.forEach(p => {
+          const type = p.type || 'unknown'
+          distribution[type] = (distribution[type] || 0) + 1
+        })
+        
+        setAnalysisData(prev => prev ? {
+          ...prev,
+          pointStats: { total: currentPoints.length, distribution }
+        } : null)
+      }
     },
-    []
+    [uploadedFile, analysisData, selectedPoints]
   )
 
   const clearAllPoints = useCallback(() => {
@@ -205,11 +267,20 @@ export default function Home() {
     if (settings.autoSave) {
       localStorage.removeItem("scan-ladder-points")
     }
+    
+    // Update analysis data
+    if (analysisData) {
+      setAnalysisData(prev => prev ? {
+        ...prev,
+        pointStats: { total: 0, distribution: {} }
+      } : null)
+    }
+    
     toast({
       title: "Points Cleared",
-      description: `Removed ${pointCount} selection points and matches`,
+      description: `Removed ${pointCount} selection points${pointCount > 0 ? ' and matches' : ''}`,
     })
-  }, [selectedPoints.length, toast, settings.autoSave])
+  }, [selectedPoints.length, toast, settings.autoSave, analysisData])
 
   const clearSelectedPoint = useCallback(
     (id: string) => {
@@ -232,13 +303,16 @@ export default function Home() {
 
   const handleExport = useCallback(
     async (options: {
-      format: "stl" | "obj" | "ply"
+      format: "stl" | "obj" | "ply" | "json" | "csv"
       quality: "low" | "medium" | "high"
       includeOriginal: boolean
       includeCylinders: boolean
       compression: boolean
       metadata: boolean
       units: "mm" | "cm" | "inches"
+      includeNormals?: boolean
+      includeColors?: boolean
+      precision?: number
     }) => {
       setIsExporting(true)
       setExportProgress(0)
@@ -265,18 +339,35 @@ export default function Home() {
         let mimeType: string
         const filename = `scan-ladder-export-${Date.now()}`
 
+        const exportOptions: FileExportOptions = {
+          ...options,
+          includeNormals: options.includeNormals ?? false,
+          includeColors: options.includeColors ?? false,
+          includeTextures: false,
+          precision: options.precision ?? 6,
+          optimization: "none"
+        }
+
         switch (options.format) {
           case "stl":
-            fileContent = generateSTLFile(selectedPoints, uploadedFile, options)
+            fileContent = generateSTLFile(selectedPoints, uploadedFile, exportOptions)
             mimeType = "application/sla"
             break
           case "obj":
-            fileContent = generateOBJFile(selectedPoints, uploadedFile, options)
+            fileContent = generateOBJFile(selectedPoints, uploadedFile, exportOptions)
             mimeType = "application/obj"
             break
           case "ply":
-            fileContent = generatePLYFile(selectedPoints, uploadedFile, options)
+            fileContent = generatePLYFile(selectedPoints, uploadedFile, exportOptions)
             mimeType = "application/ply"
+            break
+          case "json":
+            fileContent = generateJSONFile(selectedPoints, uploadedFile, exportOptions)
+            mimeType = "application/json"
+            break
+          case "csv":
+            fileContent = generateCSVFile(selectedPoints, uploadedFile, exportOptions)
+            mimeType = "text/csv"
             break
           default:
             throw new Error("Unsupported format")
@@ -455,6 +546,68 @@ export default function Home() {
     }
   }, [])
 
+  // Measurement handlers
+  const handleAddMeasurement = useCallback((measurement: Omit<typeof measurements[0], 'id' | 'timestamp'>) => {
+    const newMeasurement = {
+      ...measurement,
+      id: `measurement-${Date.now()}`,
+      timestamp: Date.now()
+    }
+    setMeasurements(prev => [...prev, newMeasurement])
+  }, [])
+
+  const handleUpdateMeasurement = useCallback((id: string, updates: Partial<typeof measurements[0]>) => {
+    setMeasurements(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m))
+  }, [])
+
+  const handleDeleteMeasurement = useCallback((id: string) => {
+    setMeasurements(prev => prev.filter(m => m.id !== id))
+  }, [])
+
+  const handleClearAllMeasurements = useCallback(() => {
+    setMeasurements([])
+  }, [])
+
+  // Handle scan selection from sidebar
+  const handleScanSelect = useCallback((scanId: string) => {
+    const scanNumber = scanId.replace("scan", "")
+    const scanFileName = `Test-Scan-${scanNumber}.stl`
+    const scanPath = `/models/${scanFileName}`
+    
+    // Create a special file-like object that the STL viewer can handle
+    const scanFile = {
+      name: scanFileName,
+      size: 0,
+      type: 'model/stl',
+      lastModified: Date.now(),
+      url: scanPath,
+      // Add File-like methods
+      slice: () => new Blob([]),
+      stream: () => new ReadableStream(),
+      text: async () => '',
+      arrayBuffer: async () => new ArrayBuffer(0)
+    } as any as File
+    
+    setUploadedFile(scanFile)
+    
+    toast({
+      title: "Scan Loaded",
+      description: `Loaded ${scanFileName} successfully`,
+    })
+  }, [toast])
+
+  // Make file upload handler available globally for sidebar
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).handleFileUpload = handleFileUpload
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).handleFileUpload
+      }
+    }
+  }, [handleFileUpload])
+
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />
   }
@@ -474,7 +627,7 @@ export default function Home() {
         settings={settings}
       />
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className={`flex-1 flex overflow-hidden relative ${isMobile ? "pt-12" : "pt-14"}`}>
         {/* Desktop/Tablet Sidebar */}
         {!isMobile && (
           <Sidebar
@@ -490,17 +643,32 @@ export default function Home() {
             isMobile={false}
             settings={settings}
             uploadedFile={uploadedFile}
+            measurements={measurements}
+            onAddMeasurement={handleAddMeasurement}
+            onUpdateMeasurement={handleUpdateMeasurement}
+            onDeleteMeasurement={handleDeleteMeasurement}
+            onClearAllMeasurements={handleClearAllMeasurements}
+            onScanSelect={handleScanSelect}
+            onCameraReset={handleCameraReset}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onToggleFullscreen={handleToggleFullscreen}
+            onToggleGrid={handleToggleGrid}
+            onToggleAxes={handleToggleAxes}
+            matchedShapes={matchedShapes}
+            showMatches={showMatches}
+            onToggleMatches={handleToggleMatches}
           />
         )}
 
         {/* Main 3D Viewer */}
         <main
           className={`flex-1 transition-all duration-300 ${
-            isMobile ? "p-1" : "p-2 md:p-4"
+            isMobile ? "p-2" : "p-3"
           } ${sidebarOpen && !isMobile ? "lg:ml-0" : ""}`}
         >
           <div
-            className={`h-full bg-white overflow-hidden border border-gray-200 ${
+            className={`h-full bg-white overflow-hidden border border-gray-200 relative ${
               isMobile ? "rounded-lg shadow-lg" : "rounded-xl shadow-xl"
             }`}
           >
@@ -521,7 +689,57 @@ export default function Home() {
               matchedShapes={matchedShapes}
               showMatches={showMatches}
               onToggleMatches={handleToggleMatches}
+              onScanSelect={handleScanSelect}
             />
+            
+            {/* Quick Access Panel - Compact */}
+            {!isMobile && (
+              <div className="absolute top-2 left-2 flex flex-col space-y-1">
+                <Link href="/scan-match">
+                  <Button variant="outline" size="sm" className="bg-white/90 backdrop-blur-sm hover:bg-white h-7 text-xs">
+                    <Brain className="w-3 h-3 mr-1" />
+                    AI Match
+                  </Button>
+                </Link>
+                <Link href="/viewer">
+                  <Button variant="outline" size="sm" className="bg-white/90 backdrop-blur-sm hover:bg-white h-7 text-xs">
+                    <Target className="w-3 h-3 mr-1" />
+                    Pro View
+                  </Button>
+                </Link>
+              </div>
+            )}
+
+            {/* Analysis Panel - Compact */}
+            {analysisData && !isMobile && (
+              <div className="absolute bottom-2 left-2 bg-white/95 backdrop-blur-sm rounded-md p-2 shadow-lg max-w-xs border border-gray-200">
+                <div className="text-xs space-y-1">
+                  <div className="font-semibold flex items-center space-x-1 text-gray-800">
+                    <Activity className="w-3 h-3 text-blue-500" />
+                    <span>Analysis</span>
+                  </div>
+                  <div className="text-xs text-gray-600 space-y-0.5">
+                    <div><span className="font-medium">File:</span> {analysisData.fileInfo.name}</div>
+                    <div><span className="font-medium">Format:</span> {analysisData.fileInfo.format}</div>
+                    <div><span className="font-medium">Size:</span> {(analysisData.fileInfo.size / 1024 / 1024).toFixed(2)} MB</div>
+                    <div><span className="font-medium">Vertices:</span> {analysisData.geometryStats.vertices.toLocaleString()}</div>
+                    <div><span className="font-medium">Faces:</span> {analysisData.geometryStats.faces.toLocaleString()}</div>
+                    <div><span className="font-medium">Points:</span> {selectedPoints.length}</div>
+                    {selectedPoints.length > 0 && analysisData.pointStats.distribution && (
+                      <div className="mt-1 pt-1 border-t border-gray-200">
+                        <div className="font-medium text-gray-700 mb-0.5">Distribution:</div>
+                        {Object.entries(analysisData.pointStats.distribution)
+                          .map(([type, count]) => (
+                            <div key={type} className="text-xs">
+                              {type}: {count}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </main>
 

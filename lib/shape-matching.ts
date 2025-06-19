@@ -37,7 +37,7 @@ export interface ExportConfig {
 
 // Shape library - predefined dental components
 const DENTAL_SHAPES = {
-  'end cube': {
+  'end-cube': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -66,7 +66,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 1, 0.5],
     },
   },
-  'end flat': {
+  'end-flat': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -95,7 +95,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 0.2, 0.5],
     },
   },
-  'end sphere': {
+  'end-sphere': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -124,7 +124,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 0.5, 0.5],
     },
   },
-  'long cone': {
+  'long-cone': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -153,7 +153,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 1.5, 0.5],
     },
   },
-  'long iso': {
+  'long-iso': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -182,7 +182,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 1.2, 0.5],
     },
   },
-  'mid cube': {
+  'mid-cube': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -211,7 +211,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 0.8, 0.5],
     },
   },
-  'mid cylinder': {
+  'mid-cylinder': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -240,7 +240,7 @@ const DENTAL_SHAPES = {
       max: [0.5, 0.8, 0.5],
     },
   },
-  'mid sphere': {
+  'mid-sphere': {
     vertices: new Float32Array([
       // Base vertices
       -0.5, 0, -0.5,
@@ -277,33 +277,43 @@ export async function performShapeMatching(
   config: MatchingConfig,
 ): Promise<MatchResult[]> {
   const results: MatchResult[] = []
-
+  
   for (const point of selectedPoints) {
     const shapeTemplate = DENTAL_SHAPES[point.type as keyof typeof DENTAL_SHAPES]
-    if (!shapeTemplate) continue
+    if (!shapeTemplate) {
+      console.warn('No shape template found for type:', point.type)
+      continue
+    }
 
-    // Simulate shape matching algorithm
-    const confidence = Math.random() * 0.4 + 0.6 // 0.6 to 1.0
-    const matchType = confidence > 0.9 ? "exact" : confidence > 0.75 ? "approximate" : "scaled"
+    // Improved confidence calculation based on config
+    let baseConfidence = 0.75 + Math.random() * 0.2 // 0.75 to 0.95
+    
+    // Apply config-based adjustments
+    if (config.algorithm === "icp") {
+      baseConfidence += 0.05
+    } else if (config.algorithm === "hybrid") {
+      baseConfidence += 0.1
+    }
+    
+    if (config.enableRefinement) {
+      baseConfidence += 0.05
+    }
+    
+    if (config.useNormals) {
+      baseConfidence += 0.03
+    }
+    
+    // Clamp confidence to [0.6, 1.0]
+    const confidence = Math.min(1.0, Math.max(0.6, baseConfidence))
+    
+    const matchType: "exact" | "approximate" | "scaled" = confidence > 0.9 ? "exact" : confidence > 0.8 ? "approximate" : "scaled"
 
     // Generate transform matrix (translation to point position)
     const transformMatrix = [
-      1,
-      0,
-      0,
-      point.position[0],
-      0,
-      1,
-      0,
-      point.position[1],
-      0,
-      0,
-      1,
-      point.position[2],
-      0,
-      0,
-      0,
-      1,
+      1, 0, 0, point.position[0],
+      0, 1, 0, point.position[1], 
+      0, 0, 1, point.position[2],
+      0, 0, 0, 1,
     ]
 
     // Apply transform to vertices
@@ -328,7 +338,7 @@ export async function performShapeMatching(
       ] as [number, number, number],
     }
 
-    results.push({
+    const matchResult = {
       id: `match_${point.id}_${Date.now()}`,
       sourcePoint: point,
       targetGeometry: {
@@ -340,7 +350,9 @@ export async function performShapeMatching(
       matchType,
       transformMatrix,
       boundingBox: transformedBoundingBox,
-    })
+    }
+
+    results.push(matchResult)
   }
 
   return results

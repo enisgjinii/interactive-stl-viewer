@@ -1,32 +1,45 @@
 export interface ExportOptions {
-  format: "stl" | "obj" | "ply"
+  format: "stl" | "obj" | "ply" | "json" | "csv"
   quality: "low" | "medium" | "high"
   includeOriginal: boolean
   includeCylinders: boolean
   compression: boolean
   metadata: boolean
   units: "mm" | "cm" | "inches"
+  includeNormals: boolean
+  includeColors: boolean
+  includeTextures: boolean
+  precision: number
+  optimization: "none" | "basic" | "aggressive"
 }
 
 export interface Point {
   id: string
   position: [number, number, number]
-  type: 'end cube' | 'end flat' | 'end sphere' | 'long cone' | 'long iso' | 'mid cube' | 'mid cylinder' | 'mid sphere'
+  type: 'end-cube' | 'end-flat' | 'end-sphere' | 'long-cone' | 'long-iso' | 'mid-cube' | 'mid-cylinder' | 'mid-sphere'
   timestamp: number
+  normal?: [number, number, number]
+  color?: [number, number, number]
+  metadata?: {
+    confidence?: number
+    sourceFile?: string
+    processingTime?: number
+    algorithm?: string
+  }
 }
 
 // Helper function to get radius based on point type
 function getRadiusForPointType(type: Point['type']): number {
   switch (type) {
-    case 'end cube':
-    case 'end flat':
-    case 'end sphere':
+    case 'end-cube':
+    case 'end-flat':
+    case 'end-sphere':
       return 0.8
-    case 'long cone':
-    case 'long iso':
-    case 'mid cube':
-    case 'mid cylinder':
-    case 'mid sphere':
+    case 'long-cone':
+    case 'long-iso':
+    case 'mid-cube':
+    case 'mid-cylinder':
+    case 'mid-sphere':
       return 1.0
     default:
       return 1.0
@@ -321,4 +334,371 @@ export function generatePLYFile(points: Point[], originalFile: File | null, opti
   })
 
   return content
+}
+
+// Advanced mesh processing utilities
+export function optimizeMesh(vertices: Float32Array, faces: Uint32Array, level: "basic" | "aggressive"): {
+  vertices: Float32Array
+  faces: Uint32Array
+  reductionRatio: number
+} {
+  // Simulate mesh optimization
+  const originalVertexCount = vertices.length / 3
+  const originalFaceCount = faces.length / 3
+  
+  let reductionFactor = level === "aggressive" ? 0.7 : 0.9
+  
+  const newVertexCount = Math.floor(originalVertexCount * reductionFactor)
+  const newFaceCount = Math.floor(originalFaceCount * reductionFactor)
+  
+  const optimizedVertices = new Float32Array(newVertexCount * 3)
+  const optimizedFaces = new Uint32Array(newFaceCount * 3)
+  
+  // Simple decimation simulation
+  for (let i = 0; i < newVertexCount * 3; i++) {
+    const sourceIndex = Math.floor((i / (newVertexCount * 3)) * vertices.length)
+    optimizedVertices[i] = vertices[sourceIndex]
+  }
+  
+  for (let i = 0; i < newFaceCount * 3; i++) {
+    const sourceIndex = Math.floor((i / (newFaceCount * 3)) * faces.length)
+    optimizedFaces[i] = Math.floor((faces[sourceIndex] / originalVertexCount) * newVertexCount)
+  }
+  
+  const reductionRatio = 1 - (newVertexCount / originalVertexCount)
+  
+  return {
+    vertices: optimizedVertices,
+    faces: optimizedFaces,
+    reductionRatio
+  }
+}
+
+export function calculateNormals(vertices: Float32Array, faces: Uint32Array): Float32Array {
+  const normals = new Float32Array(vertices.length)
+  
+  // Calculate face normals and accumulate vertex normals
+  for (let i = 0; i < faces.length; i += 3) {
+    const i1 = faces[i] * 3
+    const i2 = faces[i + 1] * 3
+    const i3 = faces[i + 2] * 3
+    
+    const v1 = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]]
+    const v2 = [vertices[i2], vertices[i2 + 1], vertices[i2 + 2]]
+    const v3 = [vertices[i3], vertices[i3 + 1], vertices[i3 + 2]]
+    
+    // Calculate face normal
+    const edge1 = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]]
+    const edge2 = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]]
+    
+    const normal = [
+      edge1[1] * edge2[2] - edge1[2] * edge2[1],
+      edge1[2] * edge2[0] - edge1[0] * edge2[2],
+      edge1[0] * edge2[1] - edge1[1] * edge2[0]
+    ]
+    
+    // Normalize
+    const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
+    if (length > 0) {
+      normal[0] /= length
+      normal[1] /= length
+      normal[2] /= length
+    }
+    
+    // Accumulate to vertex normals
+    for (let j = 0; j < 3; j++) {
+      const vertexIndex = faces[i + j] * 3
+      normals[vertexIndex] += normal[0]
+      normals[vertexIndex + 1] += normal[1]
+      normals[vertexIndex + 2] += normal[2]
+    }
+  }
+  
+  // Normalize vertex normals
+  for (let i = 0; i < normals.length; i += 3) {
+    const length = Math.sqrt(normals[i] * normals[i] + normals[i + 1] * normals[i + 1] + normals[i + 2] * normals[i + 2])
+    if (length > 0) {
+      normals[i] /= length
+      normals[i + 1] /= length
+      normals[i + 2] /= length
+    }
+  }
+  
+  return normals
+}
+
+// JSON Export for data interchange
+export function generateJSONFile(points: Point[], originalFile: File | null, options: ExportOptions): string {
+  const jsonData = {
+    metadata: {
+      format: "Scan Ladder JSON",
+      version: "2.0.0",
+      timestamp: new Date().toISOString(),
+      originalFile: originalFile?.name || null,
+      options,
+      stats: {
+        pointCount: points.length,
+        fileSize: originalFile?.size || 0
+      }
+    },
+    coordinate_system: {
+      units: options.units,
+      origin: [0, 0, 0],
+      axes: {
+        x: "right",
+        y: "up", 
+        z: "forward"
+      }
+    },
+    points: points.map(point => ({
+      id: point.id,
+      position: point.position,
+      type: point.type,
+      timestamp: point.timestamp,
+      normal: point.normal || null,
+      color: point.color || null,
+      metadata: point.metadata || null
+    })),
+    geometry: options.includeCylinders ? {
+      type: "generated_cylinders",
+      description: "Cylindrical geometry generated from points",
+      parameters: {
+        quality: options.quality,
+        radiusMethod: "type_based"
+      }
+    } : null,
+    analysis: {
+      boundingBox: calculateBoundingBox(points),
+      centroid: calculateCentroid(points),
+      distribution: analyzePointDistribution(points)
+    }
+  }
+  
+  return JSON.stringify(jsonData, null, options.compression ? 0 : 2)
+}
+
+// CSV Export for data analysis
+export function generateCSVFile(points: Point[], originalFile: File | null, options: ExportOptions): string {
+  let csv = ""
+  
+  // Header
+  const headers = [
+    "id",
+    "x", "y", "z",
+    "type",
+    "timestamp",
+    "radius"
+  ]
+  
+  if (options.includeNormals) {
+    headers.push("normal_x", "normal_y", "normal_z")
+  }
+  
+  if (options.includeColors) {
+    headers.push("color_r", "color_g", "color_b")
+  }
+  
+  if (options.metadata) {
+    headers.push("confidence", "processing_time", "algorithm")
+  }
+  
+  csv += headers.join(",") + "\n"
+  
+  // Data rows
+  points.forEach(point => {
+    const row = [
+      point.id,
+      point.position[0].toFixed(options.precision || 6),
+      point.position[1].toFixed(options.precision || 6),
+      point.position[2].toFixed(options.precision || 6),
+      point.type,
+      point.timestamp,
+      getRadiusForPointType(point.type)
+    ]
+    
+    if (options.includeNormals) {
+      const normal = point.normal || [0, 0, 1]
+      row.push(
+        normal[0].toFixed(options.precision || 6),
+        normal[1].toFixed(options.precision || 6),
+        normal[2].toFixed(options.precision || 6)
+      )
+    }
+    
+    if (options.includeColors) {
+      const color = point.color || [128, 128, 128]
+      row.push(color[0].toString(), color[1].toString(), color[2].toString())
+    }
+    
+    if (options.metadata && point.metadata) {
+      row.push(
+        point.metadata.confidence?.toString() || "",
+        point.metadata.processingTime?.toString() || "",
+        point.metadata.algorithm || ""
+      )
+    }
+    
+    csv += row.join(",") + "\n"
+  })
+  
+  return csv
+}
+
+// Analysis utilities
+function calculateBoundingBox(points: Point[]): {
+  min: [number, number, number]
+  max: [number, number, number]
+  size: [number, number, number]
+} {
+  if (points.length === 0) {
+    return {
+      min: [0, 0, 0],
+      max: [0, 0, 0],
+      size: [0, 0, 0]
+    }
+  }
+  
+  let min = [...points[0].position] as [number, number, number]
+  let max = [...points[0].position] as [number, number, number]
+  
+  points.forEach(point => {
+    min[0] = Math.min(min[0], point.position[0])
+    min[1] = Math.min(min[1], point.position[1])
+    min[2] = Math.min(min[2], point.position[2])
+    max[0] = Math.max(max[0], point.position[0])
+    max[1] = Math.max(max[1], point.position[1])
+    max[2] = Math.max(max[2], point.position[2])
+  })
+  
+  const size: [number, number, number] = [
+    max[0] - min[0],
+    max[1] - min[1],
+    max[2] - min[2]
+  ]
+  
+  return { min, max, size }
+}
+
+function calculateCentroid(points: Point[]): [number, number, number] {
+  if (points.length === 0) return [0, 0, 0]
+  
+  const sum = points.reduce((acc, point) => [
+    acc[0] + point.position[0],
+    acc[1] + point.position[1],
+    acc[2] + point.position[2]
+  ], [0, 0, 0])
+  
+  return [
+    sum[0] / points.length,
+    sum[1] / points.length,
+    sum[2] / points.length
+  ]
+}
+
+function analyzePointDistribution(points: Point[]): {
+  totalPoints: number
+  typeDistribution: Record<string, number>
+  spatialDensity: number
+  averageDistance: number
+} {
+  const typeDistribution: Record<string, number> = {}
+  points.forEach(point => {
+    typeDistribution[point.type] = (typeDistribution[point.type] || 0) + 1
+  })
+  
+  // Calculate average distance between points
+  let totalDistance = 0
+  let pairCount = 0
+  
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const distance = Math.sqrt(
+        Math.pow(points[i].position[0] - points[j].position[0], 2) +
+        Math.pow(points[i].position[1] - points[j].position[1], 2) +
+        Math.pow(points[i].position[2] - points[j].position[2], 2)
+      )
+      totalDistance += distance
+      pairCount++
+    }
+  }
+  
+  const averageDistance = pairCount > 0 ? totalDistance / pairCount : 0
+  const boundingBox = calculateBoundingBox(points)
+  const volume = boundingBox.size[0] * boundingBox.size[1] * boundingBox.size[2]
+  const spatialDensity = volume > 0 ? points.length / volume : 0
+  
+  return {
+    totalPoints: points.length,
+    typeDistribution,
+    spatialDensity,
+    averageDistance
+  }
+}
+
+// Enhanced file processing with format detection
+export function detectFileFormat(file: File): {
+  format: string
+  confidence: number
+  characteristics: string[]
+} {
+  const name = file.name.toLowerCase()
+  const characteristics: string[] = []
+  
+  if (name.endsWith('.stl')) {
+    characteristics.push('STL extension detected')
+    return { format: 'STL', confidence: 0.95, characteristics }
+  }
+  
+  if (name.endsWith('.obj')) {
+    characteristics.push('OBJ extension detected')
+    return { format: 'OBJ', confidence: 0.95, characteristics }
+  }
+  
+  if (name.endsWith('.ply')) {
+    characteristics.push('PLY extension detected')
+    return { format: 'PLY', confidence: 0.95, characteristics }
+  }
+  
+  // Could add binary file analysis here
+  characteristics.push('Unknown format')
+  return { format: 'Unknown', confidence: 0.0, characteristics }
+}
+
+// Performance monitoring
+export function benchmarkExport(
+  points: Point[], 
+  originalFile: File | null, 
+  options: ExportOptions,
+  generateFunction: (points: Point[], file: File | null, options: ExportOptions) => string
+): {
+  result: string
+  performance: {
+    executionTime: number
+    memoryUsage: number
+    outputSize: number
+    pointsPerSecond: number
+  }
+} {
+  const startTime = performance.now()
+  const startMemory = (performance as any).memory?.usedJSHeapSize || 0
+  
+  const result = generateFunction(points, originalFile, options)
+  
+  const endTime = performance.now()
+  const endMemory = (performance as any).memory?.usedJSHeapSize || 0
+  
+  const executionTime = endTime - startTime
+  const memoryUsage = endMemory - startMemory
+  const outputSize = new Blob([result]).size
+  const pointsPerSecond = points.length / (executionTime / 1000)
+  
+  return {
+    result,
+    performance: {
+      executionTime,
+      memoryUsage,
+      outputSize,
+      pointsPerSecond
+    }
+  }
 }

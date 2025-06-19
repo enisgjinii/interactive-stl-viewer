@@ -2,7 +2,7 @@
 
 import React, { Suspense, useRef, useState, useEffect, useCallback } from "react"
 import { Canvas, useThree, useFrame } from "@react-three/fiber"
-import { OrbitControls, Environment, Html, Text } from "@react-three/drei"
+import { OrbitControls, Environment, Html, Text, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei"
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js"
 import * as THREE from "three"
 import { Button } from "@/components/ui/button"
@@ -65,6 +65,11 @@ function STLModel({
     showAxes?: boolean
     autoSave?: boolean
     units?: string
+    backgroundColor?: string
+    lightingIntensity?: number
+    materialRoughness?: number
+    materialMetalness?: number
+    opacity?: number
   }
   isMobile: boolean
   onScanSelect?: (scanId: string) => void
@@ -75,9 +80,12 @@ function STLModel({
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const [hovered, setHovered] = useState(false)
   const [draggingPoint, setDraggingPoint] = useState<string | null>(null)
+  const [boundingBox, setBoundingBox] = useState<THREE.Box3 | null>(null)
+  const [vertexCount, setVertexCount] = useState(0)
+  const [faceCount, setFaceCount] = useState(0)
   const internalMeshRef = useRef<THREE.Mesh>(null)
   const actualMeshRef = meshRef || internalMeshRef
-  const { camera } = useThree()
+  const { camera, scene } = useThree()
   const { toast } = useToast()
 
   const loadSTL = async () => {
@@ -111,11 +119,42 @@ function STLModel({
       })
 
       if (isMounted) {
+        // Optimize geometry for performance
+        geometry.computeBoundingBox()
+        geometry.computeBoundingSphere()
+        geometry.computeVertexNormals()
+        
+        // Calculate statistics
+        const positionAttribute = geometry.getAttribute('position')
+        const bbox = new THREE.Box3()
+        if (positionAttribute) {
+          bbox.setFromBufferAttribute(positionAttribute as THREE.BufferAttribute)
+        }
+        const vertexCount = positionAttribute?.count || 0
+        const faceCount = geometry.index ? geometry.index.count / 3 : vertexCount / 3
+        
         setGeometry(geometry)
+        setBoundingBox(bbox)
+        setVertexCount(vertexCount)
+        setFaceCount(faceCount)
+        
         toast({
           title: "Model Loaded",
-          description: "STL file has been successfully loaded",
+          description: `STL file loaded: ${vertexCount} vertices, ${Math.floor(faceCount)} faces`,
         })
+        
+        // Auto-fit camera to model
+        if (bbox && camera) {
+          const center = bbox.getCenter(new THREE.Vector3())
+          const size = bbox.getSize(new THREE.Vector3())
+          const maxDim = Math.max(size.x, size.y, size.z)
+          const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
+          const cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2 * Math.PI / 180))
+          
+          camera.position.set(center.x, center.y, center.z + cameraZ * 1.5)
+          camera.lookAt(center)
+          camera.updateProjectionMatrix()
+        }
       }
     } catch (err) {
       console.error('STL loading error:', err) // Debug log
@@ -152,16 +191,12 @@ function STLModel({
       onPointSelect({
         id,
         position,
-        type: "selection",
+        type: "mid-sphere",
+        modelType: "mid-sphere",
         timestamp: Date.now(),
       })
-
-      // Automatically trigger scan selection
-      if (onScanSelect) {
-        onScanSelect(id)
-      }
     },
-    [onPointSelect, onScanSelect, actualMeshRef]
+    [onPointSelect, actualMeshRef]
   )
 
   const handlePointDragStart = useCallback((pointId: string) => {
@@ -231,22 +266,44 @@ function STLModel({
   }
 
   return (
-    <mesh
-      ref={actualMeshRef}
-      geometry={geometry}
-      onClick={handleClick}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      castShadow
-      receiveShadow
-    >
-      <meshStandardMaterial
-        color={hovered ? "#f0d0a0" : "#e8c4a0"}
-        roughness={0.2}
-        metalness={0.1}
-        envMapIntensity={0.5}
-      />
-    </mesh>
+    <group>
+      <mesh
+        ref={actualMeshRef}
+        geometry={geometry}
+        onClick={handleClick}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial
+          color={hovered ? "#f0d0a0" : "#e8c4a0"}
+          roughness={settings.materialRoughness || 0.2}
+          metalness={settings.materialMetalness || 0.1}
+          transparent={settings.opacity !== undefined && settings.opacity < 1}
+          opacity={settings.opacity || 1.0}
+          envMapIntensity={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      
+      {/* Bounding box visualization - using wireframe box instead */}
+      {boundingBox && settings.showAxes && (
+        <mesh>
+          <boxGeometry args={[boundingBox.max.x - boundingBox.min.x, boundingBox.max.y - boundingBox.min.y, boundingBox.max.z - boundingBox.min.z]} />
+          <meshBasicMaterial color="#ff0000" wireframe transparent opacity={0.3} />
+        </mesh>
+      )}
+      
+      {/* Vertex count indicator */}
+      {!isMobile && (
+        <Html position={[0, 0, 0]} distanceFactor={50}>
+          <div className="bg-black/70 text-white px-2 py-1 rounded text-xs">
+            {vertexCount.toLocaleString()} vertices
+          </div>
+        </Html>
+      )}
+    </group>
   )
 }
 
@@ -381,7 +438,7 @@ function ModelMockups({
       try {
         const geometry = await loader.loadAsync(`/models/${model.id}.stl`)
         geometry.center()
-        const scale = 0.15
+        const scale = 0.08 // Smaller scale for better visibility
         geometry.scale(scale, scale, scale)
         setModelGeometries(prev => ({
           ...prev,
@@ -559,28 +616,57 @@ function ModelMockups({
   )
 }
 
-function DefaultScene({ isMobile, settings }: { isMobile: boolean; settings: any }) {
+function DefaultScene({ isMobile, settings, onPointSelect }: { isMobile: boolean; settings: any; onPointSelect: (point: Point) => void }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  
+  const handleMeshClick = useCallback((event: any, label: string) => {
+    event.stopPropagation()
+    
+    const point = event.point
+    const id = `point-${Date.now()}`
+    const position: [number, number, number] = [point.x, point.y, point.z]
+    
+    onPointSelect({
+      id,
+      position,
+      type: "mid-sphere",
+      timestamp: Date.now(),
+    })
+  }, [onPointSelect])
+
   return (
     <group>
-      {/* Enhanced mock dental scan bodies */}
+      {/* Enhanced mock dental scan bodies - smaller sizes */}
       {[
-        { pos: [0, 0, 0], color: "#e8c4a0", label: "Upper Left", size: 1.0 },
-        { pos: [2.5, 0, 1], color: "#e8c4a0", label: "Upper Right", size: 0.9 },
-        { pos: [-2.5, 0, 1], color: "#e8c4a0", label: "Lower Left", size: 0.8 },
-        { pos: [0, 0, 2.5], color: "#e8c4a0", label: "Lower Right", size: 1.1 },
-        { pos: [1.5, 0, -1.5], color: "#e8c4a0", label: "Molar", size: 0.7 },
+        { pos: [0, 0, 0], color: "#e8c4a0", label: "Upper Left", size: 0.5 },
+        { pos: [1.5, 0, 0.5], color: "#e8c4a0", label: "Upper Right", size: 0.45 },
+        { pos: [-1.5, 0, 0.5], color: "#e8c4a0", label: "Lower Left", size: 0.4 },
+        { pos: [0, 0, 1.5], color: "#e8c4a0", label: "Lower Right", size: 0.55 },
+        { pos: [0.8, 0, -0.8], color: "#e8c4a0", label: "Molar", size: 0.35 },
       ].map((item, index) => (
         <group key={index} position={item.pos as [number, number, number]}>
-          <mesh castShadow receiveShadow>
-            <cylinderGeometry args={[item.size, item.size, 0.5, 8]} />
-            <meshStandardMaterial color={item.color} roughness={0.3} metalness={0.1} />
+          <mesh 
+            castShadow 
+            receiveShadow
+            onClick={(e) => handleMeshClick(e, item.label)}
+            onPointerOver={() => setHoveredIndex(index)}
+            onPointerOut={() => setHoveredIndex(null)}
+          >
+            <cylinderGeometry args={[item.size, item.size, 0.3, 16]} />
+            <meshStandardMaterial 
+              color={hoveredIndex === index ? "#f0d0a0" : item.color} 
+              roughness={0.3} 
+              metalness={0.1}
+              emissive={hoveredIndex === index ? "#ff6b35" : "#000000"}
+              emissiveIntensity={hoveredIndex === index ? 0.2 : 0}
+            />
           </mesh>
-          <mesh position={[0, 0.3, 0]} castShadow>
-            <cylinderGeometry args={[item.size * 0.6, item.size * 0.6, 0.4, 8]} />
+          <mesh position={[0, 0.2, 0]} castShadow>
+            <cylinderGeometry args={[item.size * 0.6, item.size * 0.6, 0.2, 16]} />
             <meshStandardMaterial color="#d4b896" roughness={0.2} metalness={0.2} />
           </mesh>
           {!isMobile && (
-            <Text position={[0, 1.2, 0]} fontSize={0.25} color="#666" anchorX="center" anchorY="middle">
+            <Text position={[0, 0.6, 0]} fontSize={0.15} color="#666" anchorX="center" anchorY="middle">
               {item.label}
             </Text>
           )}
@@ -622,7 +708,7 @@ function CameraControls({
   const { toast } = useToast()
 
   const resetCamera = useCallback(() => {
-    camera.position.set(8, 8, 8)
+    camera.position.set(5, 5, 5)
     camera.lookAt(0, 0, 0)
     onCameraReset?.()
   }, [camera, onCameraReset])
@@ -789,6 +875,91 @@ function LoadingFallback({ isMobile }: { isMobile: boolean }) {
   )
 }
 
+// Grid and Axes component
+function GridAndAxes({ settings }: { settings: any }) {
+  const { scene } = useThree()
+  
+  useEffect(() => {
+    // Clean up previous helpers
+    const existingGrid = scene.getObjectByName('gridHelper')
+    const existingAxes = scene.getObjectByName('axesHelper')
+    
+    if (existingGrid) scene.remove(existingGrid)
+    if (existingAxes) scene.remove(existingAxes)
+    
+    if (settings?.showGrid) {
+      const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc)
+      gridHelper.name = 'gridHelper'
+      scene.add(gridHelper)
+    }
+    
+    if (settings?.showAxes) {
+      const axesHelper = new THREE.AxesHelper(5)
+      axesHelper.name = 'axesHelper'
+      scene.add(axesHelper)
+    }
+    
+    return () => {
+      const grid = scene.getObjectByName('gridHelper')
+      const axes = scene.getObjectByName('axesHelper')
+      if (grid) scene.remove(grid)
+      if (axes) scene.remove(axes)
+    }
+  }, [scene, settings?.showGrid, settings?.showAxes])
+  
+  return null
+}
+
+// Point Markers component to show visible spheres at selected points
+function PointMarkers({ 
+  selectedPoints, 
+  isMobile 
+}: { 
+  selectedPoints: Point[]
+  isMobile: boolean 
+}) {
+  return (
+    <>
+      {selectedPoints.map((point, index) => (
+        <group key={point.id} position={point.position}>
+          {/* Main sphere marker */}
+          <mesh>
+            <sphereGeometry args={[0.15, 16, 16]} />
+            <meshStandardMaterial 
+              color="#ff6b35"
+              emissive="#ff6b35"
+              emissiveIntensity={0.5}
+              roughness={0.2}
+              metalness={0.8}
+            />
+          </mesh>
+          
+          {/* Outer glow effect */}
+          <mesh>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshBasicMaterial 
+              color="#ff6b35"
+              transparent
+              opacity={0.3}
+            />
+          </mesh>
+          
+          {/* Point label */}
+          <Html 
+            distanceFactor={isMobile ? 30 : 20} 
+            position={[0, 0.3, 0]}
+            center
+          >
+            <div className="bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg">
+              P{index + 1}
+            </div>
+          </Html>
+        </group>
+      ))}
+    </>
+  )
+}
+
 export function STLViewer({
   file,
   onPointSelect,
@@ -814,9 +985,15 @@ export function STLViewer({
 
   useEffect(() => {
     if (file) {
-      const objectUrl = URL.createObjectURL(file)
-      setUrl(objectUrl)
-      return () => URL.revokeObjectURL(objectUrl)
+      // Check if file has a URL property (for scan files)
+      if ('url' in file && typeof (file as any).url === 'string') {
+        setUrl((file as any).url)
+      } else {
+        // Regular file upload
+        const objectUrl = URL.createObjectURL(file)
+        setUrl(objectUrl)
+        return () => URL.revokeObjectURL(objectUrl)
+      }
     }
   }, [file])
 
@@ -825,7 +1002,7 @@ export function STLViewer({
       <div className="absolute inset-0">
         <Canvas
           shadows
-          camera={{ position: [8, 8, 8], fov: 50 }}
+          camera={{ position: [5, 5, 5], fov: 50 }}
           className="bg-gradient-to-br from-gray-50 to-gray-100"
         >
           <Suspense fallback={<LoadingFallback isMobile={isMobile} />}>
@@ -834,8 +1011,8 @@ export function STLViewer({
               enableDamping
               dampingFactor={0.1}
               rotateSpeed={0.7}
-              minDistance={2}
-              maxDistance={20}
+              minDistance={1}
+              maxDistance={50}
               enablePan={true}
               enableZoom={true}
               enableRotate={true}
@@ -843,12 +1020,16 @@ export function STLViewer({
               target={[0, 0, 0]}
               makeDefault
             />
-            <ambientLight intensity={0.5} />
+            <ambientLight intensity={0.6} />
             <directionalLight
               position={[10, 10, 5]}
-              intensity={1}
+              intensity={1.2}
               castShadow
               shadow-mapSize={[2048, 2048]}
+            />
+            <directionalLight
+              position={[-5, 5, -5]}
+              intensity={0.4}
             />
             <Environment preset="city" />
             {url ? (
@@ -861,7 +1042,7 @@ export function STLViewer({
                 meshRef={meshRef}
               />
             ) : (
-              <DefaultScene isMobile={isMobile} settings={settings} />
+              <DefaultScene isMobile={isMobile} settings={settings} onPointSelect={onPointSelect} />
             )}
             {selectedPoints.length > 0 && (
               <ModelMockups
@@ -876,6 +1057,8 @@ export function STLViewer({
             {matchedShapes.length > 0 && (
               <MatchedShapes matches={matchedShapes} showMatches={showMatches} isMobile={isMobile} />
             )}
+            <GridAndAxes settings={settings} />
+            <PointMarkers selectedPoints={selectedPoints} isMobile={isMobile} />
             <CameraControls
               isMobile={isMobile}
               onMobileMenuOpen={onMobileMenuOpen}
