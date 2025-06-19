@@ -32,10 +32,6 @@ interface MobileNavigationProps {
   onExport: () => void
   onSettings: () => void
   onInfo: () => void
-  onCameraReset: () => void
-  onZoomIn: () => void
-  onZoomOut: () => void
-  onToggleFullscreen: () => void
   settings: any
   onToggleGrid: () => void
   onToggleAxes: () => void
@@ -50,10 +46,6 @@ export function MobileNavigation({
   onExport,
   onSettings,
   onInfo,
-  onCameraReset,
-  onZoomIn,
-  onZoomOut,
-  onToggleFullscreen,
   settings,
   onToggleGrid,
   onToggleAxes,
@@ -200,7 +192,15 @@ export function MobileNavigation({
                   <Button
                     variant="outline"
                     className="h-16 flex flex-col items-center justify-center space-y-1"
-                    onClick={() => handleAction(onCameraReset, "Camera position reset")}
+                    onClick={() => {
+                      if ((window as any).handleCameraReset) {
+                        (window as any).handleCameraReset()
+                        toast({
+                          title: "Camera Reset",
+                          description: "Camera position has been reset",
+                        })
+                      }
+                    }}
                   >
                     <RotateCcw className="w-5 h-5" />
                     <span className="text-xs">Reset</span>
@@ -208,7 +208,15 @@ export function MobileNavigation({
                   <Button
                     variant="outline"
                     className="h-16 flex flex-col items-center justify-center space-y-1"
-                    onClick={() => handleAction(onZoomIn, "Zoomed in")}
+                    onClick={() => {
+                      if ((window as any).handleZoomIn) {
+                        (window as any).handleZoomIn()
+                        toast({
+                          title: "Zoomed In",
+                          description: "Camera zoomed in",
+                        })
+                      }
+                    }}
                   >
                     <ZoomIn className="w-5 h-5" />
                     <span className="text-xs">Zoom In</span>
@@ -216,7 +224,15 @@ export function MobileNavigation({
                   <Button
                     variant="outline"
                     className="h-16 flex flex-col items-center justify-center space-y-1"
-                    onClick={() => handleAction(onZoomOut, "Zoomed out")}
+                    onClick={() => {
+                      if ((window as any).handleZoomOut) {
+                        (window as any).handleZoomOut()
+                        toast({
+                          title: "Zoomed Out",
+                          description: "Camera zoomed out",
+                        })
+                      }
+                    }}
                   >
                     <ZoomOut className="w-5 h-5" />
                     <span className="text-xs">Zoom Out</span>
@@ -224,7 +240,11 @@ export function MobileNavigation({
                   <Button
                     variant="outline"
                     className="h-16 flex flex-col items-center justify-center space-y-1"
-                    onClick={() => handleAction(onToggleFullscreen, "Toggled fullscreen")}
+                    onClick={() => {
+                      if ((window as any).handleToggleFullscreen) {
+                        (window as any).handleToggleFullscreen()
+                      }
+                    }}
                   >
                     <Maximize2 className="w-5 h-5" />
                     <span className="text-xs">Fullscreen</span>

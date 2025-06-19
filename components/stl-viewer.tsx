@@ -7,10 +7,9 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js"
 import * as THREE from "three"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RotateCcw, ZoomIn, ZoomOut, Move3D, Maximize2, Menu, Grid3X3, Eye, EyeOff, Search } from "lucide-react"
+import { Eye, EyeOff, Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
-import type { MatchResult } from "@/lib/shape-matching"
 
 interface Point {
   id: string
@@ -35,16 +34,11 @@ interface STLViewerProps {
     autoSave?: boolean
     units?: string
   }
+  onScanSelect?: (scanId: string) => void
   onCameraReset?: () => void
   onZoomIn?: () => void
   onZoomOut?: () => void
   onToggleFullscreen?: () => void
-  onToggleGrid?: () => void
-  onToggleAxes?: () => void
-  matchedShapes?: MatchResult[]
-  showMatches?: boolean
-  onToggleMatches?: () => void
-  onScanSelect?: (scanId: string) => void
 }
 
 function STLModel({
@@ -304,58 +298,6 @@ function STLModel({
         </Html>
       )}
     </group>
-  )
-}
-
-function MatchedShapes({
-  matches,
-  showMatches,
-  isMobile,
-}: {
-  matches: MatchResult[]
-  showMatches: boolean
-  isMobile: boolean
-}) {
-  if (!showMatches || !matches.length) return null
-
-  return (
-    <>
-      {matches.map((match, index) => {
-        const vertices = match.targetGeometry.vertices
-        const faces = match.targetGeometry.faces
-
-        // Create geometry from match data
-        const geometry = new THREE.BufferGeometry()
-        geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3))
-        geometry.setIndex(new THREE.BufferAttribute(faces, 1))
-        geometry.computeVertexNormals()
-
-        const opacity = match.confidence * 0.8 + 0.2
-        const color =
-          match.matchType === "exact" ? "#10b981" : match.matchType === "approximate" ? "#f59e0b" : "#3b82f6"
-
-        return (
-          <group key={match.id}>
-            <mesh geometry={geometry} castShadow receiveShadow>
-              <meshStandardMaterial color={color} transparent opacity={opacity} roughness={0.3} metalness={0.7} />
-            </mesh>
-            <Html position={match.sourcePoint.position} distanceFactor={isMobile ? 25 : 20}>
-              <div className="bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1 text-xs font-medium shadow-lg border">
-                <div className="flex items-center space-x-1">
-                  <div className={`match-indicator ${
-                    match.matchType === "exact" ? "match-indicator-exact" : 
-                    match.matchType === "approximate" ? "match-indicator-approximate" : 
-                    "match-indicator-similar"
-                  }`}></div>
-                  <span>Match {index + 1}</span>
-                </div>
-                <div className="text-xs text-gray-600">{(match.confidence * 100).toFixed(0)}% confidence</div>
-              </div>
-            </Html>
-          </group>
-        )
-      })}
-    </>
   )
 }
 
@@ -676,186 +618,6 @@ function DefaultScene({ isMobile, settings, onPointSelect }: { isMobile: boolean
   )
 }
 
-function CameraControls({
-  isMobile,
-  onMobileMenuOpen,
-  settings,
-  onCameraReset,
-  onZoomIn,
-  onZoomOut,
-  onToggleFullscreen,
-  onToggleGrid,
-  onToggleAxes,
-  onToggleMatches,
-  showMatches,
-  hasMatches,
-}: {
-  isMobile: boolean
-  onMobileMenuOpen: () => void
-  settings: any
-  onCameraReset?: () => void
-  onZoomIn?: () => void
-  onZoomOut?: () => void
-  onToggleFullscreen?: () => void
-  onToggleGrid?: () => void
-  onToggleAxes?: () => void
-  onToggleMatches?: () => void
-  showMatches?: boolean
-  hasMatches?: boolean
-}) {
-  const { camera, gl } = useThree()
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const { toast } = useToast()
-
-  const resetCamera = useCallback(() => {
-    camera.position.set(5, 5, 5)
-    camera.lookAt(0, 0, 0)
-    onCameraReset?.()
-  }, [camera, onCameraReset])
-
-  const zoomIn = useCallback(() => {
-    const factor = 0.8
-    const newPosition = camera.position.clone().multiplyScalar(factor)
-    camera.position.copy(newPosition)
-    onZoomIn?.()
-  }, [camera, onZoomIn])
-
-  const zoomOut = useCallback(() => {
-    const factor = 1.2
-    const newPosition = camera.position.clone().multiplyScalar(factor)
-    camera.position.copy(newPosition)
-    onZoomOut?.()
-  }, [camera, onZoomOut])
-
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      gl.domElement.parentElement?.requestFullscreen()
-      setIsFullscreen(true)
-      onToggleFullscreen?.()
-    } else {
-      document.exitFullscreen()
-      setIsFullscreen(false)
-      onToggleFullscreen?.()
-    }
-  }, [gl, onToggleFullscreen])
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
-    }
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange)
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
-  }, [])
-
-  return (
-    <group>
-      <Html
-        position={[0, 0, 0]}
-        style={{
-          pointerEvents: "none",
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-        }}
-      >
-        <div className={`fixed z-10 pointer-events-auto ${isMobile ? "top-2 right-2" : "top-4 right-4"}`}>
-          <div className="flex flex-col space-y-2">
-            <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-1.5 transition-all duration-300 hover:shadow-xl">
-              <div className="flex space-x-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={resetCamera}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                  title="Reset Camera"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={zoomIn}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={zoomOut}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleFullscreen}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors"
-                  title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                >
-                  <Maximize2 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onToggleGrid}
-                  className={`h-8 w-8 p-0 rounded-lg transition-colors ${
-                    settings?.showGrid ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "hover:bg-gray-50"
-                  }`}
-                  title="Toggle Grid"
-                >
-                  <Grid3X3 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onToggleAxes}
-                  className={`h-8 w-8 p-0 rounded-lg transition-colors ${
-                    settings?.showAxes ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "hover:bg-gray-50"
-                  }`}
-                  title="Toggle Axes"
-                >
-                  <Move3D className="w-4 h-4" />
-                </Button>
-                {hasMatches && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onToggleMatches}
-                    className={`h-8 w-8 p-0 rounded-lg transition-colors ${
-                      showMatches ? "bg-green-50 text-green-600 hover:bg-green-100" : "hover:bg-gray-50"
-                    }`}
-                    title="Toggle Matches"
-                  >
-                    <Search className="w-4 h-4" />
-                  </Button>
-                )}
-                {isMobile && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onMobileMenuOpen}
-                    className="h-8 w-8 p-0 rounded-lg hover:bg-gray-50"
-                    title="Open Menu"
-                  >
-                    <Menu className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Html>
-    </group>
-  )
-}
-
 function LoadingFallback({ isMobile }: { isMobile: boolean }) {
   return (
     <Html center>
@@ -960,6 +722,115 @@ function PointMarkers({
   )
 }
 
+// Camera Controls component that can access Three.js context
+function CameraControls({
+  onCameraReset,
+  onZoomIn,
+  onZoomOut,
+  onToggleFullscreen,
+}: {
+  onCameraReset?: () => void
+  onZoomIn?: () => void
+  onZoomOut?: () => void
+  onToggleFullscreen?: () => void
+}) {
+  const { camera, gl } = useThree()
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const { toast } = useToast()
+
+  const handleCameraReset = useCallback(() => {
+    if (camera) {
+      camera.position.set(5, 5, 5)
+      camera.lookAt(0, 0, 0)
+      onCameraReset?.()
+      toast({
+        title: "Camera Reset",
+        description: "Camera position has been reset",
+      })
+    }
+  }, [camera, onCameraReset, toast])
+
+  const handleZoomIn = useCallback(() => {
+    if (camera) {
+      const factor = 0.8
+      const newPosition = camera.position.clone().multiplyScalar(factor)
+      camera.position.copy(newPosition)
+      onZoomIn?.()
+      toast({
+        title: "Zoomed In",
+        description: "Camera zoomed in",
+      })
+    }
+  }, [camera, onZoomIn, toast])
+
+  const handleZoomOut = useCallback(() => {
+    if (camera) {
+      const factor = 1.2
+      const newPosition = camera.position.clone().multiplyScalar(factor)
+      camera.position.copy(newPosition)
+      onZoomOut?.()
+      toast({
+        title: "Zoomed Out",
+        description: "Camera zoomed out",
+      })
+    }
+  }, [camera, onZoomOut, toast])
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      gl?.domElement.parentElement?.requestFullscreen()
+      setIsFullscreen(true)
+      onToggleFullscreen?.()
+      toast({
+        title: "Fullscreen",
+        description: "Entered fullscreen mode",
+      })
+    } else {
+      document.exitFullscreen()
+      setIsFullscreen(false)
+      onToggleFullscreen?.()
+      toast({
+        title: "Fullscreen",
+        description: "Exited fullscreen mode",
+      })
+    }
+  }, [gl, onToggleFullscreen, toast])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
+  }, [])
+
+  // Expose functions to parent component
+  useEffect(() => {
+    if (onCameraReset) {
+      (window as any).handleCameraReset = handleCameraReset
+    }
+    if (onZoomIn) {
+      (window as any).handleZoomIn = handleZoomIn
+    }
+    if (onZoomOut) {
+      (window as any).handleZoomOut = handleZoomOut
+    }
+    if (onToggleFullscreen) {
+      (window as any).handleToggleFullscreen = handleToggleFullscreen
+    }
+
+    return () => {
+      delete (window as any).handleCameraReset
+      delete (window as any).handleZoomIn
+      delete (window as any).handleZoomOut
+      delete (window as any).handleToggleFullscreen
+    }
+  }, [handleCameraReset, handleZoomIn, handleZoomOut, handleToggleFullscreen, onCameraReset, onZoomIn, onZoomOut, onToggleFullscreen])
+
+  return null
+}
+
 export function STLViewer({
   file,
   onPointSelect,
@@ -968,16 +839,11 @@ export function STLViewer({
   isMobile,
   onMobileMenuOpen,
   settings,
+  onScanSelect,
   onCameraReset,
   onZoomIn,
   onZoomOut,
   onToggleFullscreen,
-  onToggleGrid,
-  onToggleAxes,
-  matchedShapes = [],
-  showMatches = false,
-  onToggleMatches,
-  onScanSelect,
 }: STLViewerProps) {
   const [url, setUrl] = useState<string | null>(null)
   const controlsRef = useRef<any>(null)
@@ -1054,24 +920,13 @@ export function STLViewer({
                 meshRef={meshRef}
               />
             )}
-            {matchedShapes.length > 0 && (
-              <MatchedShapes matches={matchedShapes} showMatches={showMatches} isMobile={isMobile} />
-            )}
             <GridAndAxes settings={settings} />
             <PointMarkers selectedPoints={selectedPoints} isMobile={isMobile} />
             <CameraControls
-              isMobile={isMobile}
-              onMobileMenuOpen={onMobileMenuOpen}
-              settings={settings}
               onCameraReset={onCameraReset}
               onZoomIn={onZoomIn}
               onZoomOut={onZoomOut}
               onToggleFullscreen={onToggleFullscreen}
-              onToggleGrid={onToggleGrid}
-              onToggleAxes={onToggleAxes}
-              onToggleMatches={onToggleMatches}
-              showMatches={showMatches}
-              hasMatches={matchedShapes.length > 0}
             />
           </Suspense>
         </Canvas>

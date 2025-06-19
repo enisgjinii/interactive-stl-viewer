@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useCallback, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -137,6 +137,47 @@ export function Sidebar({
     }
   }
 
+  const handleToggleGrid = useCallback(() => {
+    onToggleGrid?.()
+    toast({
+      title: "Grid Toggled",
+      description: `Grid ${settings?.showGrid ? "hidden" : "shown"}`,
+    })
+  }, [onToggleGrid, settings?.showGrid, toast])
+
+  const handleToggleAxes = useCallback(() => {
+    onToggleAxes?.()
+    toast({
+      title: "Axes Toggled",
+      description: `Axes ${settings?.showAxes ? "hidden" : "shown"}`,
+    })
+  }, [onToggleAxes, settings?.showAxes, toast])
+
+  // Camera control handlers using global functions
+  const handleCameraReset = useCallback(() => {
+    if ((window as any).handleCameraReset) {
+      (window as any).handleCameraReset()
+    }
+  }, [])
+
+  const handleZoomIn = useCallback(() => {
+    if ((window as any).handleZoomIn) {
+      (window as any).handleZoomIn()
+    }
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    if ((window as any).handleZoomOut) {
+      (window as any).handleZoomOut()
+    }
+  }, [])
+
+  const handleToggleFullscreen = useCallback(() => {
+    if ((window as any).handleToggleFullscreen) {
+      (window as any).handleToggleFullscreen()
+    }
+  }, [])
+
   return (
     <>
       {/* Mobile overlay */}
@@ -196,7 +237,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onCameraReset}
+                  onClick={handleCameraReset}
                   className="h-7 text-xs px-1"
                   title="Reset Camera"
                 >
@@ -205,7 +246,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onZoomIn}
+                  onClick={handleZoomIn}
                   className="h-7 text-xs px-1"
                   title="Zoom In"
                 >
@@ -214,7 +255,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onZoomOut}
+                  onClick={handleZoomOut}
                   className="h-7 text-xs px-1"
                   title="Zoom Out"
                 >
@@ -223,7 +264,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onToggleFullscreen}
+                  onClick={handleToggleFullscreen}
                   className="h-7 text-xs px-1"
                   title="Fullscreen"
                 >
@@ -232,7 +273,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onToggleGrid}
+                  onClick={handleToggleGrid}
                   className={`h-7 text-xs px-1 ${
                     settings?.showGrid 
                       ? "bg-blue-50 text-blue-600 border-blue-300" 
@@ -245,7 +286,7 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onToggleAxes}
+                  onClick={handleToggleAxes}
                   className={`h-7 text-xs px-1 ${
                     settings?.showAxes 
                       ? "bg-purple-50 text-purple-600 border-purple-300" 

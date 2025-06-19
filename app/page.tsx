@@ -11,20 +11,11 @@ import { InfoModal } from "@/components/info-modal"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { MobileNavigation } from "@/components/mobile-navigation"
 import { MeasurementTools } from "@/components/measurement-tools"
-import { MatchingModal } from "@/components/matching-modal"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { generateSTLFile, generateOBJFile, generatePLYFile, generateJSONFile, generateCSVFile, Point, ExportOptions as FileExportOptions } from "@/lib/file-generators"
-import {
-  performShapeMatching,
-  generateMatchedSceneSTL,
-  generateMatchedSceneOBJ,
-  type MatchingConfig,
-  type MatchResult,
-  type ExportConfig as MatchExportConfig,
-} from "@/lib/shape-matching"
-import { Search, Scan, Target, Brain, Activity } from "lucide-react"
+import { Search, Scan, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -51,12 +42,9 @@ export default function Home() {
   const [infoModalOpen, setInfoModalOpen] = useState(false)
   const [mobileBottomSheetOpen, setMobileBottomSheetOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [matchingModalOpen, setMatchingModalOpen] = useState(false)
   const [exportType, setExportType] = useState<"hs-cap-small" | "hs-cap">("hs-cap")
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
-  const [matchedShapes, setMatchedShapes] = useState<MatchResult[]>([])
-  const [showMatches, setShowMatches] = useState(true)
   const [analysisData, setAnalysisData] = useState<{
     fileInfo: { name: string; size: number; format: string }
     geometryStats: { vertices: number; faces: number; volume: number }
@@ -263,7 +251,6 @@ export default function Home() {
   const clearAllPoints = useCallback(() => {
     const pointCount = selectedPoints.length
     setSelectedPoints([])
-    setMatchedShapes([]) // Clear matches when points are cleared
     if (settings.autoSave) {
       localStorage.removeItem("scan-ladder-points")
     }
@@ -278,7 +265,7 @@ export default function Home() {
     
     toast({
       title: "Points Cleared",
-      description: `Removed ${pointCount} selection points${pointCount > 0 ? ' and matches' : ''}`,
+      description: `Removed ${pointCount} selection points`,
     })
   }, [selectedPoints.length, toast, settings.autoSave, analysisData])
 
@@ -291,11 +278,9 @@ export default function Home() {
         }
         return updated
       })
-      // Clear related matches
-      setMatchedShapes((prevMatches) => prevMatches.filter((match) => match.sourcePoint.id !== id))
       toast({
         title: "Point Removed",
-        description: "Selection point and related matches have been removed.",
+        description: "Selection point has been removed.",
       })
     },
     [toast, settings.autoSave],
@@ -418,90 +403,7 @@ export default function Home() {
     [selectedPoints, uploadedFile, toast, isMobile],
   )
 
-  // Shape Matching Functions
-  const handleStartMatching = useCallback(
-    async (config: MatchingConfig): Promise<MatchResult[]> => {
-      const originalGeometry = uploadedFile ? await uploadedFile.arrayBuffer() : null
-      const results = await performShapeMatching(selectedPoints, originalGeometry, config)
-      setMatchedShapes(results)
-      setShowMatches(true)
-      return results
-    },
-    [selectedPoints, uploadedFile],
-  )
-
-  const handleExportMatched = useCallback(
-    async (matches: MatchResult[], config: MatchExportConfig) => {
-      const originalGeometry = uploadedFile ? await uploadedFile.arrayBuffer() : null
-      const filename = `matched-scene-${Date.now()}`
-
-      let fileContent: string
-      let mimeType: string
-
-      switch (config.format) {
-        case "stl":
-          fileContent = generateMatchedSceneSTL(matches, originalGeometry, selectedPoints, config)
-          mimeType = "application/sla"
-          break
-        case "obj":
-          fileContent = generateMatchedSceneOBJ(matches, originalGeometry, selectedPoints, config)
-          mimeType = "application/obj"
-          break
-        case "ply":
-          // For PLY, use STL format as fallback
-          fileContent = generateMatchedSceneSTL(matches, originalGeometry, selectedPoints, config)
-          mimeType = "application/ply"
-          break
-        default:
-          throw new Error("Unsupported format")
-      }
-
-      // Create and download file
-      const blob = new Blob([fileContent], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-      const element = document.createElement("a")
-      element.href = url
-      element.download = `${filename}.${config.format}`
-      document.body.appendChild(element)
-      element.click()
-      document.body.removeChild(element)
-      URL.revokeObjectURL(url)
-
-      // Save to export history
-      const exportHistory = JSON.parse(localStorage.getItem("scan-ladder-export-history") || "[]")
-      exportHistory.unshift({
-        id: Date.now().toString(),
-        filename: `${filename}.${config.format}`,
-        format: config.format,
-        timestamp: new Date().toISOString(),
-        pointCount: selectedPoints.length,
-        matchCount: matches.length,
-        fileSize: blob.size,
-        type: "matched-scene",
-        options: config,
-      })
-      localStorage.setItem("scan-ladder-export-history", JSON.stringify(exportHistory.slice(0, 10)))
-    },
-    [uploadedFile, selectedPoints],
-  )
-
-  // Camera control handlers
-  const handleCameraReset = useCallback(() => {
-    // This will be handled by the STLViewer component
-  }, [])
-
-  const handleZoomIn = useCallback(() => {
-    // This will be handled by the STLViewer component
-  }, [])
-
-  const handleZoomOut = useCallback(() => {
-    // This will be handled by the STLViewer component
-  }, [])
-
-  const handleToggleFullscreen = useCallback(() => {
-    // This will be handled by the STLViewer component
-  }, [])
-
+  // Camera control handlers - now handled in sidebar
   const handleToggleGrid = useCallback(() => {
     updateSettings({ showGrid: !settings.showGrid })
   }, [settings.showGrid, updateSettings])
@@ -509,14 +411,6 @@ export default function Home() {
   const handleToggleAxes = useCallback(() => {
     updateSettings({ showAxes: !settings.showAxes })
   }, [settings.showAxes, updateSettings])
-
-  const handleToggleMatches = useCallback(() => {
-    setShowMatches(!showMatches)
-    toast({
-      title: "Matches Toggled",
-      description: `Matched shapes ${!showMatches ? "shown" : "hidden"}`,
-    })
-  }, [showMatches, toast])
 
   const handleSettingsOpen = useCallback(() => {
     setSettingsModalOpen(true)
@@ -649,15 +543,8 @@ export default function Home() {
             onDeleteMeasurement={handleDeleteMeasurement}
             onClearAllMeasurements={handleClearAllMeasurements}
             onScanSelect={handleScanSelect}
-            onCameraReset={handleCameraReset}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
-            onToggleFullscreen={handleToggleFullscreen}
             onToggleGrid={handleToggleGrid}
             onToggleAxes={handleToggleAxes}
-            matchedShapes={matchedShapes}
-            showMatches={showMatches}
-            onToggleMatches={handleToggleMatches}
           />
         )}
 
@@ -680,33 +567,16 @@ export default function Home() {
               isMobile={isMobile}
               onMobileMenuOpen={() => setMobileBottomSheetOpen(true)}
               settings={settings}
-              onCameraReset={handleCameraReset}
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onToggleFullscreen={handleToggleFullscreen}
-              onToggleGrid={handleToggleGrid}
-              onToggleAxes={handleToggleAxes}
-              matchedShapes={matchedShapes}
-              showMatches={showMatches}
-              onToggleMatches={handleToggleMatches}
-              onScanSelect={handleScanSelect}
+              onCameraReset={() => {}}
+              onZoomIn={() => {}}
+              onZoomOut={() => {}}
+              onToggleFullscreen={() => {}}
             />
             
             {/* Quick Access Panel - Compact */}
             {!isMobile && (
               <div className="absolute top-2 left-2 flex flex-col space-y-1">
-                <Link href="/scan-match">
-                  <Button variant="outline" size="sm" className="bg-white/90 backdrop-blur-sm hover:bg-white h-7 text-xs">
-                    <Brain className="w-3 h-3 mr-1" />
-                    AI Match
-                  </Button>
-                </Link>
-                <Link href="/viewer">
-                  <Button variant="outline" size="sm" className="bg-white/90 backdrop-blur-sm hover:bg-white h-7 text-xs">
-                    <Target className="w-3 h-3 mr-1" />
-                    Pro View
-                  </Button>
-                </Link>
+                {/* AI Match and Pro View buttons removed */}
               </div>
             )}
 
@@ -777,10 +647,6 @@ export default function Home() {
             }}
             onSettings={handleSettingsOpen}
             onInfo={handleInfoOpen}
-            onCameraReset={handleCameraReset}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
-            onToggleFullscreen={handleToggleFullscreen}
             settings={settings}
             onToggleGrid={handleToggleGrid}
             onToggleAxes={handleToggleAxes}
@@ -818,32 +684,7 @@ export default function Home() {
         isMobile={isMobile}
       />
 
-      <MatchingModal
-        isOpen={matchingModalOpen}
-        onClose={() => setMatchingModalOpen(false)}
-        selectedPoints={selectedPoints}
-        uploadedFile={uploadedFile}
-        onStartMatching={handleStartMatching}
-        onExportMatched={handleExportMatched}
-        isMobile={isMobile}
-        settings={settings}
-      />
-
       <Toaster />
-
-      {/* Floating Action Button for Shape Matching */}
-      {selectedPoints.length > 0 && (
-        <div className={`fixed z-50 ${isMobile ? "bottom-20 right-4" : "bottom-8 right-8"}`}>
-          <Button
-            onClick={() => setMatchingModalOpen(true)}
-            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 rounded-full"
-            size={isMobile ? "lg" : "lg"}
-          >
-            <Search className="w-5 h-5 mr-2" />
-            {isMobile ? "Match" : "Shape Matching"}
-          </Button>
-        </div>
-      )}
     </div>
   )
 }
