@@ -15,9 +15,12 @@ import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { generateSTLFile, generateOBJFile, generatePLYFile, generateJSONFile, generateCSVFile, Point, ExportOptions as FileExportOptions } from "@/lib/file-generators"
+import { DetectedGeometry } from "@/lib/geometry-detection"
 import { Search, Scan, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { PartsToolbar } from "@/components/parts-toolbar"
+import { exportScene } from "@/lib/scene-export"
 
 export interface AppSettings {
   renderQuality: "low" | "medium" | "high"
@@ -45,10 +48,13 @@ export default function Home() {
   const [exportType, setExportType] = useState<"hs-cap-small" | "hs-cap">("hs-cap")
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
+  const [detectedGeometries, setDetectedGeometries] = useState<DetectedGeometry[]>([])
+  const [showDetectedGeometries, setShowDetectedGeometries] = useState(true)
   const [analysisData, setAnalysisData] = useState<{
     fileInfo: { name: string; size: number; format: string }
     geometryStats: { vertices: number; faces: number; volume: number }
     pointStats: { total: number; distribution: Record<string, number> }
+    detectionStats?: { total: number; algorithms: Record<string, number>; confidence: number }
   } | null>(null)
   const [measurements, setMeasurements] = useState<Array<{
     id: string
@@ -190,8 +196,58 @@ export default function Home() {
     [toast, settings.autoSave, isMobile],
   )
 
+  const [activePart, setActivePart] = useState<string | null>(null)
+  const [pendingGroup, setPendingGroup] = useState<{ part: string; groupId: string } | null>(null)
+  const [scene3D, setScene3D] = useState<any>(null)
+
   const handlePointSelect = useCallback(
     (point: { id: string; position: [number, number, number]; type: string; timestamp: number; modelType?: string }) => {
+      // If a part is selected, we are in placement mode
+      if (activePart) {
+        // First point for this part
+        if (!pendingGroup || pendingGroup.part !== activePart) {
+          const groupId = `group-${Date.now()}`
+          const newPoint: Point = {
+            id: point.id,
+            position: point.position,
+            type: activePart as Point['type'],
+            timestamp: point.timestamp,
+            groupId,
+            metadata: {
+              algorithm: "manual_selection"
+            }
+          }
+          setSelectedPoints(prev => [...prev, newPoint])
+          setPendingGroup({ part: activePart, groupId })
+          toast({
+            title: "First Anchor Set",
+            description: `Point 1 placed for ${activePart}. Select Point 2.`
+          })
+          return
+        }
+        // Second point completes the group
+        if (pendingGroup && pendingGroup.part === activePart) {
+          const newPoint: Point = {
+            id: point.id,
+            position: point.position,
+            type: activePart as Point['type'],
+            timestamp: point.timestamp,
+            groupId: pendingGroup.groupId,
+            metadata: {
+              algorithm: "manual_selection"
+            }
+          }
+          setSelectedPoints(prev => [...prev, newPoint])
+          setPendingGroup(null)
+          setActivePart(null) // Reset selection
+          toast({
+            title: "Part Placed",
+            description: `${activePart} connected between the two points.`
+          })
+          return
+        }
+      }
+
       // Check if point already exists
       const existingPointIndex = selectedPoints.findIndex(p => p.id === point.id)
       
@@ -245,7 +301,7 @@ export default function Home() {
         } : null)
       }
     },
-    [uploadedFile, analysisData, selectedPoints]
+    [uploadedFile, analysisData, selectedPoints, activePart, pendingGroup, toast]
   )
 
   const clearAllPoints = useCallback(() => {
@@ -490,6 +546,94 @@ export default function Home() {
     })
   }, [toast])
 
+  // Handle detected geometries from STL viewer
+  const handleGeometriesDetected = useCallback((geometries: DetectedGeometry[]) => {
+    setDetectedGeometries(geometries)
+    
+    // Update analysis data with detection stats
+    if (analysisData) {
+      const algorithms: Record<string, number> = {}
+      let totalConfidence = 0
+      
+      geometries.forEach(geom => {
+        algorithms[geom.algorithm] = (algorithms[geom.algorithm] || 0) + 1
+        totalConfidence += geom.confidence
+      })
+      
+      const avgConfidence = geometries.length > 0 ? totalConfidence / geometries.length : 0
+      
+      setAnalysisData(prev => prev ? {
+        ...prev,
+        detectionStats: {
+          total: geometries.length,
+          algorithms,
+          confidence: avgConfidence
+        }
+      } : null)
+    }
+
+    toast({
+      title: "Geometry Detection Complete",
+      description: `Detected ${geometries.length} geometric features using ICP and feature analysis`,
+    })
+  }, [analysisData, toast])
+
+  // Toggle visibility of detected geometries
+  const handleToggleDetectedGeometries = useCallback(() => {
+    setShowDetectedGeometries(prev => !prev)
+    toast({
+      title: showDetectedGeometries ? "Detections Hidden" : "Detections Shown",
+      description: `Detected geometries are now ${showDetectedGeometries ? "hidden" : "visible"}`,
+    })
+  }, [showDetectedGeometries, toast])
+
+  // Auto-place best-fit points based on detected geometries
+  const handleAutoPlacePoints = useCallback(() => {
+    const autoPoints: Point[] = detectedGeometries
+      .filter(geom => geom.confidence > 0.7) // Only high-confidence detections
+      .map(geom => ({
+        id: `auto-${geom.id}`,
+        position: geom.center,
+        type: geom.type as Point['type'],
+        timestamp: Date.now(),
+        metadata: {
+          confidence: geom.confidence,
+          sourceFile: uploadedFile?.name,
+          processingTime: Date.now() - geom.timestamp,
+          algorithm: `auto_${geom.algorithm}`
+        }
+      }))
+
+    if (autoPoints.length > 0) {
+      setSelectedPoints(prev => [...prev, ...autoPoints])
+      toast({
+        title: "Auto-Placement Complete",
+        description: `Placed ${autoPoints.length} points at high-confidence geometric features`,
+      })
+    } else {
+      toast({
+        title: "No High-Confidence Detections",
+        description: "No geometries with confidence > 70% found for auto-placement",
+        variant: "destructive",
+      })
+    }
+  }, [detectedGeometries, uploadedFile, toast])
+
+  // Clear detected geometries
+  const handleClearDetectedGeometries = useCallback(() => {
+    setDetectedGeometries([])
+    if (analysisData) {
+      setAnalysisData(prev => prev ? {
+        ...prev,
+        detectionStats: { total: 0, algorithms: {}, confidence: 0 }
+      } : null)
+    }
+    toast({
+      title: "Detections Cleared",
+      description: "All detected geometries have been removed",
+    })
+  }, [analysisData, toast])
+
   // Make file upload handler available globally for sidebar
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -501,6 +645,31 @@ export default function Home() {
       }
     }
   }, [handleFileUpload])
+
+  // Watch for toolbar actions for export
+  useEffect(() => {
+    if (!scene3D) return
+    if (activePart === 'export-stl' || activePart === 'export-obj') {
+      const format = activePart === 'export-stl' ? 'stl' : 'obj'
+      try {
+        const { data, mime } = exportScene(scene3D, format as any)
+        const blob = new Blob([data], { type: mime })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `scan-ladder-export.${format}`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(url)
+        toast({ title: 'Export complete', description: `Model exported as ${format.toUpperCase()}` })
+      } catch (err) {
+        console.error(err)
+        toast({ title: 'Export failed', description: 'Unable to export scene', variant: 'destructive' })
+      }
+      setActivePart(null)
+    }
+  }, [activePart, scene3D, toast])
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />
@@ -545,6 +714,11 @@ export default function Home() {
             onScanSelect={handleScanSelect}
             onToggleGrid={handleToggleGrid}
             onToggleAxes={handleToggleAxes}
+            matchedShapes={detectedGeometries}
+            showMatches={showDetectedGeometries}
+            onToggleMatches={handleToggleDetectedGeometries}
+            onAutoPlacePoints={handleAutoPlacePoints}
+            onClearDetectedGeometries={handleClearDetectedGeometries}
           />
         )}
 
@@ -571,8 +745,18 @@ export default function Home() {
               onZoomIn={() => {}}
               onZoomOut={() => {}}
               onToggleFullscreen={() => {}}
+              onScanSelect={handleScanSelect}
+              onGeometriesDetected={handleGeometriesDetected}
+              showDetectedGeometries={showDetectedGeometries}
+              detectedGeometries={detectedGeometries}
+              onSceneReady={setScene3D}
             />
             
+            {/* Parts selection toolbar */}
+            {!isMobile && (
+              <PartsToolbar activePart={activePart} onSelectPart={setActivePart} />
+            )}
+
             {/* Quick Access Panel - Compact */}
             {!isMobile && (
               <div className="absolute top-2 left-2 flex flex-col space-y-1">

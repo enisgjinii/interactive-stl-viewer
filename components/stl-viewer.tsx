@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Eye, EyeOff, Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { geometryDetector, DetectedGeometry } from "@/lib/geometry-detection"
 
 interface Point {
   id: string
@@ -18,6 +19,7 @@ interface Point {
   timestamp: number
   rotation?: [number, number, number]
   modelType?: string
+  groupId?: string
 }
 
 interface STLViewerProps {
@@ -39,7 +41,14 @@ interface STLViewerProps {
   onZoomIn?: () => void
   onZoomOut?: () => void
   onToggleFullscreen?: () => void
+  onGeometriesDetected?: (geometries: DetectedGeometry[]) => void
+  showDetectedGeometries?: boolean
+  detectedGeometries?: DetectedGeometry[]
+  onSceneReady?: (scene: THREE.Scene) => void
 }
+
+// Global in-memory cache so the same STL file isn't parsed more than once per session
+const geometryCache: Record<string, THREE.BufferGeometry> = {}
 
 function STLModel({
   url,
@@ -49,6 +58,9 @@ function STLModel({
   isMobile,
   onScanSelect,
   meshRef,
+  onGeometriesDetected,
+  showDetectedGeometries = true,
+  detectedGeometries = [],
 }: {
   url: string
   onPointSelect: (point: Point) => void
@@ -68,6 +80,9 @@ function STLModel({
   isMobile: boolean
   onScanSelect?: (scanId: string) => void
   meshRef?: React.RefObject<THREE.Mesh>
+  onGeometriesDetected?: (geometries: DetectedGeometry[]) => void
+  showDetectedGeometries?: boolean
+  detectedGeometries?: DetectedGeometry[]
 }) {
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -77,14 +92,121 @@ function STLModel({
   const [boundingBox, setBoundingBox] = useState<THREE.Box3 | null>(null)
   const [vertexCount, setVertexCount] = useState(0)
   const [faceCount, setFaceCount] = useState(0)
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [detectionProgress, setDetectionProgress] = useState(0)
   const internalMeshRef = useRef<THREE.Mesh>(null)
   const actualMeshRef = meshRef || internalMeshRef
   const { camera, scene } = useThree()
   const { toast } = useToast()
 
+  // Ensure we schedule detection only once per geometry instance
+  useEffect(() => {
+    if (!onGeometriesDetected) return
+    if (!geometry || !actualMeshRef.current) return
+
+    let scheduled = false
+    const scheduleDetection = () => {
+      if (scheduled) return
+      scheduled = true
+      if (typeof (window as any).requestIdleCallback === 'function') {
+        (window as any).requestIdleCallback(() => runGeometryDetection(), { timeout: 3000 })
+      } else {
+        setTimeout(() => runGeometryDetection(), 500)
+      }
+    }
+
+    scheduleDetection()
+  }, [geometry, onGeometriesDetected])
+
+  const runGeometryDetection = async () => {
+    if (!actualMeshRef.current || !geometry) return
+
+    setIsDetecting(true)
+    setDetectionProgress(0)
+
+    try {
+      toast({
+        title: "Geometry Detection Started",
+        description: "Analyzing STL for known geometric patterns...",
+      })
+
+      // Simulate detection progress
+      const progressInterval = setInterval(() => {
+        setDetectionProgress(prev => {
+          const newProgress = prev + Math.random() * 15
+          return newProgress >= 90 ? 90 : newProgress
+        })
+      }, 200)
+
+      const detectedGeometries = await geometryDetector.detectGeometries(
+        actualMeshRef.current,
+        {
+          useICP: true,
+          useCurvatureAnalysis: true,
+          useFeatureExtraction: true,
+          minConfidence: 0.5, // Lower threshold for more detections
+        }
+      )
+
+      clearInterval(progressInterval)
+      setDetectionProgress(100)
+
+      if (onGeometriesDetected) {
+        onGeometriesDetected(detectedGeometries)
+      }
+
+      toast({
+        title: "Geometry Detection Complete",
+        description: `Found ${detectedGeometries.length} potential geometric matches`,
+      })
+
+    } catch (error) {
+      console.error('Geometry detection error:', error)
+      toast({
+        title: "Detection Error",
+        description: "Failed to detect geometries. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDetecting(false)
+      setDetectionProgress(0)
+    }
+  }
+
   const loadSTL = async () => {
     const loader = new STLLoader()
     let isMounted = true
+
+    // Fast-path: do we already have this geometry cached?
+    if (geometryCache[url]) {
+      const cached = geometryCache[url]
+      // Clone so transformations applied later don't mutate the shared instance
+      const cloned = cached.clone()
+
+      // Basic stats (cached alongside geometry after first load)
+      if (cached.userData.stats) {
+        const { bbox, vertexCount, faceCount } = cached.userData.stats
+        setGeometry(cloned)
+        setBoundingBox(bbox)
+        setVertexCount(vertexCount)
+        setFaceCount(faceCount)
+        setLoadingProgress(100)
+
+        // Fit camera similarly to first-load logic
+        if (bbox && camera) {
+          const center = bbox.getCenter(new THREE.Vector3())
+          const size = bbox.getSize(new THREE.Vector3())
+          const maxDim = Math.max(size.x, size.y, size.z)
+          const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
+          const cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2 * Math.PI / 180))
+          camera.position.set(center.x, center.y, center.z + cameraZ * 1.5)
+          camera.lookAt(center)
+          camera.updateProjectionMatrix()
+        }
+        setLoadingProgress(100)
+        return
+      }
+    }
 
     try {
       console.log('Loading STL from URL:', url) // Debug log
@@ -113,10 +235,12 @@ function STLModel({
       })
 
       if (isMounted) {
-        // Optimize geometry for performance
+        // Heavy calculations first time only, then cache
         geometry.computeBoundingBox()
         geometry.computeBoundingSphere()
-        geometry.computeVertexNormals()
+        if (!geometry.getAttribute('normal')) {
+          geometry.computeVertexNormals()
+        }
         
         // Calculate statistics
         const positionAttribute = geometry.getAttribute('position')
@@ -131,6 +255,10 @@ function STLModel({
         setBoundingBox(bbox)
         setVertexCount(vertexCount)
         setFaceCount(faceCount)
+        
+        // Store in cache for instant subsequent use
+        geometry.userData.stats = { bbox, vertexCount, faceCount }
+        geometryCache[url] = geometry
         
         toast({
           title: "Model Loaded",
@@ -174,24 +302,67 @@ function STLModel({
     }
   }, [url])
 
+  // Enhanced click handler for better feature detection
   const handleClick = useCallback(
     (event: any) => {
       if (!actualMeshRef.current || !event.point) return
 
       const point = event.point
+      const normal = event.face?.normal
       const id = `point-${Date.now()}`
       const position: [number, number, number] = [point.x, point.y, point.z]
+
+      // Determine point type based on surface normal and local geometry
+      const pointType = determinePointType(point, normal, event.face)
 
       onPointSelect({
         id,
         position,
-        type: "mid-sphere",
-        modelType: "mid-sphere",
+        type: pointType,
+        modelType: pointType,
         timestamp: Date.now(),
       })
+
+      // Highlight the clicked area temporarily
+      highlightClickedArea(point)
     },
     [onPointSelect, actualMeshRef]
   )
+
+  const determinePointType = (point: THREE.Vector3, normal?: THREE.Vector3, face?: any): string => {
+    if (!normal) return "mid-sphere"
+
+    // Analyze the local surface curvature
+    const curvature = Math.abs(normal.length() - 1) // Simplified curvature estimation
+    
+    if (curvature > 0.1) {
+      return "mid-sphere" // High curvature suggests spherical
+    } else if (curvature < 0.05) {
+      return "end-flat" // Low curvature suggests flat
+    } else {
+      return "mid-cylinder" // Medium curvature suggests cylindrical
+    }
+  }
+
+  const highlightClickedArea = (point: THREE.Vector3) => {
+    // Create a temporary highlight effect
+    const highlightGeometry = new THREE.SphereGeometry(0.1, 8, 8)
+    const highlightMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xff6b35, 
+      transparent: true, 
+      opacity: 0.8 
+    })
+    const highlightMesh = new THREE.Mesh(highlightGeometry, highlightMaterial)
+    highlightMesh.position.copy(point)
+    scene.add(highlightMesh)
+
+    // Remove highlight after animation
+    setTimeout(() => {
+      scene.remove(highlightMesh)
+      highlightGeometry.dispose()
+      highlightMaterial.dispose()
+    }, 1000)
+  }
 
   const handlePointDragStart = useCallback((pointId: string) => {
     setDraggingPoint(pointId)
@@ -281,6 +452,59 @@ function STLModel({
         />
       </mesh>
       
+      {/* Detected Geometries Visualization */}
+      {showDetectedGeometries && detectedGeometries.map((detectedGeom) => {
+        const position = new THREE.Vector3(...detectedGeom.center)
+        const rotation = new THREE.Euler(...detectedGeom.rotation)
+        const scale = new THREE.Vector3(...detectedGeom.scale)
+        
+        return (
+          <group key={detectedGeom.id} position={position} rotation={rotation} scale={scale}>
+            {/* Wireframe overlay to show detected geometry */}
+            <mesh>
+              {detectedGeom.type === 'sphere' && <sphereGeometry args={[1, 16, 16]} />}
+              {detectedGeom.type === 'cylinder' && <cylinderGeometry args={[1, 1, 2, 16]} />}
+              {detectedGeom.type === 'cube' && <boxGeometry args={[2, 2, 2]} />}
+              {detectedGeom.type === 'cone' && <coneGeometry args={[1, 2, 16]} />}
+              <meshBasicMaterial 
+                color={detectedGeom.algorithm === 'icp' ? "#00ff00" : detectedGeom.algorithm === 'feature_extraction' ? "#ff0000" : "#0000ff"}
+                wireframe 
+                transparent 
+                opacity={0.4}
+              />
+            </mesh>
+            
+            {/* Confidence indicator */}
+            <Html distanceFactor={isMobile ? 25 : 20} position={[0, 0, 0]}>
+              <div className="bg-black/80 text-white px-2 py-1 rounded text-xs">
+                <div className="font-medium">{detectedGeom.type}</div>
+                <div className="text-xs opacity-75">
+                  {Math.round(detectedGeom.confidence * 100)}% • {detectedGeom.algorithm}
+                </div>
+              </div>
+            </Html>
+          </group>
+        )
+      })}
+      
+      {/* Geometry Detection Progress */}
+      {isDetecting && (
+        <Html center>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="text-center">
+              <div className="text-blue-600 font-medium mb-2">Detecting Geometries</div>
+              <div className="w-32 h-2 bg-blue-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${detectionProgress}%` }}
+                />
+              </div>
+              <div className="text-xs text-blue-600 mt-1">{Math.round(detectionProgress)}%</div>
+            </div>
+          </div>
+        </Html>
+      )}
+      
       {/* Bounding box visualization - using wireframe box instead */}
       {boundingBox && settings.showAxes && (
         <mesh>
@@ -320,6 +544,7 @@ function ModelMockups({
   const [draggingPoint, setDraggingPoint] = useState<string | null>(null)
   const [rotatingPoint, setRotatingPoint] = useState<string | null>(null)
   const [showModelSelector, setShowModelSelector] = useState<string | null>(null)
+  const [groupFlips, setGroupFlips] = useState<{ [groupId: string]: { flipX: boolean; flipY: boolean } }>({})
   const { camera, raycaster, pointer } = useThree()
   const loader = new STLLoader()
 
@@ -420,140 +645,84 @@ function ModelMockups({
     }
   }
 
+  const toggleFlip = (groupId: string, axis: 'x' | 'y') => {
+    setGroupFlips(prev => {
+      const current = prev[groupId] || { flipX: false, flipY: false }
+      return {
+        ...prev,
+        [groupId]: {
+          ...current,
+          flipX: axis === 'x' ? !current.flipX : current.flipX,
+          flipY: axis === 'y' ? !current.flipY : current.flipY,
+        },
+      }
+    })
+  }
+
   return (
     <>
-      {selectedPoints.map((point, index) => {
-        const modelType = point.modelType || point.type
-        const geometry = modelGeometries[modelType]
-        const scale = draggingPoint === point.id ? 1.2 : 1.0
-        const color = draggingPoint === point.id ? "#ffb366" : "#e8c4a0"
-        const rotation = point.rotation || [0, 0, 0]
+      {/* Group points by groupId to render connecting parts */}
+      {(() => {
+        const groups: Record<string, Point[]> = {}
+        selectedPoints.forEach(p => {
+          if (p.groupId) {
+            groups[p.groupId] = groups[p.groupId] ? [...groups[p.groupId], p] : [p]
+          }
+        })
 
-        if (!geometry) {
-          return null
-        }
+        return Object.entries(groups).map(([groupId, points]) => {
+          if (points.length < 2) return null // Need 2 points to place the part
 
-        const position = new THREE.Vector3(point.position[0], point.position[1] - 0.075, point.position[2])
+          const [p1, p2] = points
+          const modelType = p1.modelType || p1.type
+          const geometry = modelGeometries[modelType]
+          if (!geometry) return null
 
-        return (
-          <group 
-            key={point.id} 
-            position={position}
-            rotation={rotation}
-            scale={scale}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              if (e.button === 0) { // Left click for drag
-                setDraggingPoint(point.id)
-                document.body.style.cursor = 'grabbing'
-              }
-            }}
-            onPointerUp={(e) => {
-              e.stopPropagation()
-              setDraggingPoint(null)
-              setRotatingPoint(null)
-              document.body.style.cursor = 'default'
-            }}
-            onPointerOver={(e) => {
-              e.stopPropagation()
-              if (!draggingPoint && !rotatingPoint) {
-                document.body.style.cursor = 'grab'
-              }
-            }}
-            onPointerOut={(e) => {
-              e.stopPropagation()
-              if (!draggingPoint && !rotatingPoint) {
-                document.body.style.cursor = 'default'
-              }
-            }}
-            onContextMenu={(e) => {
-              e.stopPropagation()
-            }}
-          >
-            <mesh geometry={geometry} castShadow receiveShadow renderOrder={1}>
-              <meshStandardMaterial 
-                color={color} 
-                roughness={0.3} 
-                metalness={0.1}
-                emissive={draggingPoint === point.id ? "#ffb366" : "#000000"}
-                emissiveIntensity={draggingPoint === point.id ? 0.2 : 0}
-              />
-            </mesh>
-            <Html distanceFactor={isMobile ? 20 : 15} position={[0, 0.2, 0]}>
-              <div className="flex flex-col items-center space-y-2">
-                <div
-                  className={`bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold shadow-lg transform transition-all hover:scale-105 ${
-                    isMobile ? "px-2 py-1 text-xs" : "px-3 py-1 text-xs"
-                  } ${draggingPoint === point.id ? 'ring-2 ring-orange-300 ring-offset-2' : ''}`}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Point {index + 1}</span>
-                    {!isMobile && (
-                      <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
-                        {modelType}
-                      </Badge>
-                    )}
+          // Ensure geometry has bounding box to measure length along Y
+          if (!geometry.boundingBox) {
+            geometry.computeBoundingBox()
+          }
+          const bbox = geometry.boundingBox as THREE.Box3
+          const baseLength = bbox.max.y - bbox.min.y || 1
+
+          // Calculate transform between the two points
+          const start = new THREE.Vector3(...p1.position)
+          const end = new THREE.Vector3(...p2.position)
+          const dir = new THREE.Vector3().subVectors(end, start)
+          const distance = dir.length()
+          const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+          let quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
+
+          const flips = groupFlips[groupId]
+          if (flips) {
+            if (flips.flipX) {
+              quaternion = quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI))
+            }
+            if (flips.flipY) {
+              quaternion = quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI))
+            }
+          }
+
+          const scaleY = distance / baseLength
+
+          return (
+            <group key={groupId} position={mid} quaternion={quaternion} scale={[1, scaleY, 1]}>
+              <mesh geometry={geometry} castShadow receiveShadow>
+                <meshStandardMaterial color="#e8c4a0" roughness={0.3} metalness={0.1} />
+              </mesh>
+              {/* Flip controls overlay */}
+              {!isMobile && (
+                <Html distanceFactor={20} position={[0, 0, 0]} center>
+                  <div className="flex space-x-1 bg-white/90 backdrop-blur-sm p-1 rounded shadow-lg text-xs">
+                    <button onClick={() => toggleFlip(groupId,'x')} className="px-1 hover:bg-orange-100 rounded">Flip X</button>
+                    <button onClick={() => toggleFlip(groupId,'y')} className="px-1 hover:bg-orange-100 rounded">Flip Y</button>
                   </div>
-                  {!isMobile && (
-                    <div className="text-xs opacity-75 mt-0.5">{new Date(point.timestamp).toLocaleTimeString()}</div>
-                  )}
-                </div>
-                
-                {/* Rotation Controls */}
-                {!isMobile && (
-                  <div className="flex space-x-2 bg-white/90 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-                    <button
-                      onClick={() => handleRotation(point.id, 'x', Math.PI / 4)}
-                      className="p-1 hover:bg-orange-100 rounded"
-                      title="Rotate X"
-                    >
-                      ↻X
-                    </button>
-                    <button
-                      onClick={() => handleRotation(point.id, 'y', Math.PI / 4)}
-                      className="p-1 hover:bg-orange-100 rounded"
-                      title="Rotate Y"
-                    >
-                      ↻Y
-                    </button>
-                    <button
-                      onClick={() => handleRotation(point.id, 'z', Math.PI / 4)}
-                      className="p-1 hover:bg-orange-100 rounded"
-                      title="Rotate Z"
-                    >
-                      ↻Z
-                    </button>
-                    <button
-                      onClick={() => setShowModelSelector(point.id)}
-                      className="p-1 hover:bg-orange-100 rounded"
-                      title="Change Model"
-                    >
-                      🔄
-                    </button>
-                  </div>
-                )}
-
-                {/* Model Selector */}
-                {showModelSelector === point.id && (
-                  <div className="absolute top-full mt-2 bg-white rounded-lg shadow-xl p-2 z-50">
-                    <div className="grid grid-cols-2 gap-2">
-                      {availableModels.map((model) => (
-                        <button
-                          key={model.id}
-                          onClick={() => handleModelChange(point.id, model.id)}
-                          className="p-2 text-xs hover:bg-orange-100 rounded text-left"
-                        >
-                          {model.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Html>
-          </group>
-        )
-      })}
+                </Html>
+              )}
+            </group>
+          )
+        })
+      })()}
     </>
   )
 }
@@ -831,6 +1000,14 @@ function CameraControls({
   return null
 }
 
+const SceneCapture = ({ onReady }: { onReady?: (scene: THREE.Scene) => void }) => {
+  const { scene } = useThree()
+  useEffect(() => {
+    onReady?.(scene)
+  }, [scene, onReady])
+  return null
+}
+
 export function STLViewer({
   file,
   onPointSelect,
@@ -844,6 +1021,10 @@ export function STLViewer({
   onZoomIn,
   onZoomOut,
   onToggleFullscreen,
+  onGeometriesDetected,
+  showDetectedGeometries = true,
+  detectedGeometries = [],
+  onSceneReady,
 }: STLViewerProps) {
   const [url, setUrl] = useState<string | null>(null)
   const controlsRef = useRef<any>(null)
@@ -898,6 +1079,7 @@ export function STLViewer({
               intensity={0.4}
             />
             <Environment preset="city" />
+            {onSceneReady && <SceneCapture onReady={onSceneReady} />}
             {url ? (
               <STLModel 
                 url={url} 
@@ -906,6 +1088,9 @@ export function STLViewer({
                 isMobile={isMobile}
                 onScanSelect={onScanSelect}
                 meshRef={meshRef}
+                onGeometriesDetected={onGeometriesDetected}
+                showDetectedGeometries={showDetectedGeometries}
+                detectedGeometries={detectedGeometries}
               />
             ) : (
               <DefaultScene isMobile={isMobile} settings={settings} onPointSelect={onPointSelect} />

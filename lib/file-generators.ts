@@ -20,6 +20,7 @@ export interface Point {
   timestamp: number
   normal?: [number, number, number]
   color?: [number, number, number]
+  groupId?: string
   metadata?: {
     confidence?: number
     sourceFile?: string
