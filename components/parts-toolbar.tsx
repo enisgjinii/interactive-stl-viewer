@@ -2,42 +2,56 @@
 
 import React from "react"
 import { Button } from "@/components/ui/button"
-
-const PARTS = [
-  { id: "end-cube", name: "End Cube" },
-  { id: "end-flat", name: "End Flat" },
-  { id: "end-sphere", name: "End Sphere" },
-  { id: "long-cone", name: "Long Cone" },
-  { id: "long-iso", name: "Long ISO" },
-  { id: "mid-cube", name: "Mid Cube" },
-  { id: "mid-cylinder", name: "Mid Cylinder" },
-  { id: "mid-sphere", name: "Mid Sphere" }
-]
+import { Box, Square, Circle, Cone, Cylinder } from "lucide-react"
 
 interface PartsToolbarProps {
   activePart: string | null
-  onSelectPart: (partId: string | null) => void
+  onSelectPart: (part: string | null) => void
 }
 
 export function PartsToolbar({ activePart, onSelectPart }: PartsToolbarProps) {
+  const parts = [
+    { id: "end-cube", name: "End Cube", icon: Box, color: "text-blue-500" },
+    { id: "end-flat", name: "End Flat", icon: Square, color: "text-green-500" },
+    { id: "end-sphere", name: "End Sphere", icon: Circle, color: "text-purple-500" },
+    { id: "long-cone", name: "Long Cone", icon: Cone, color: "text-orange-500" },
+    { id: "long-iso", name: "Long Iso", icon: Cylinder, color: "text-red-500" },
+  ]
+
   return (
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-lg rounded-lg shadow-lg p-2 flex flex-col space-y-1 z-50">
-      <div className="font-semibold text-xs text-gray-700 text-center mb-1">Parts</div>
-      {PARTS.map(part => (
-        <Button
-          key={part.id}
-          variant={activePart === part.id ? "default" : "outline"}
-          size="sm"
-          className="text-xs"
-          onClick={() => onSelectPart(activePart === part.id ? null : part.id)}
-          title={`Place ${part.name}`}
-        >
-          {part.name}
-        </Button>
-      ))}
-      <div className="h-px bg-gray-300 my-1" />
-      <Button variant="default" size="sm" className="text-xs" onClick={() => onSelectPart('export-stl')} title="Export STL">Export STL</Button>
-      <Button variant="default" size="sm" className="text-xs" onClick={() => onSelectPart('export-obj')} title="Export OBJ">Export OBJ</Button>
+    <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg p-2 shadow-lg border border-gray-200">
+      <div className="flex flex-col space-y-2">
+        <div className="text-xs font-medium text-gray-700 mb-2">Place Parts</div>
+        {parts.map((part) => {
+          const Icon = part.icon
+          return (
+            <Button
+              key={part.id}
+              variant={activePart === part.id ? "default" : "outline"}
+              size="sm"
+              onClick={() => onSelectPart(activePart === part.id ? null : part.id)}
+              className={`w-full h-8 text-xs justify-start ${
+                activePart === part.id ? "bg-blue-500 text-white" : ""
+              }`}
+              title={`Select ${part.name} to place`}
+            >
+              <Icon className={`w-3 h-3 mr-2 ${part.color}`} />
+              {part.name}
+            </Button>
+          )
+        })}
+        {activePart && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSelectPart(null)}
+            className="w-full h-8 text-xs justify-start text-red-600 border-red-200 hover:bg-red-50"
+            title="Cancel part selection"
+          >
+            Cancel
+          </Button>
+        )}
+      </div>
     </div>
   )
 } 

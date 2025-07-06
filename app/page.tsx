@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { STLViewer } from "@/components/stl-viewer"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
@@ -10,16 +10,14 @@ import { SettingsModal } from "@/components/settings-modal"
 import { InfoModal } from "@/components/info-modal"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { MobileNavigation } from "@/components/mobile-navigation"
-import { MeasurementTools } from "@/components/measurement-tools"
+import { PartsToolbar } from "@/components/parts-toolbar"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { generateSTLFile, generateOBJFile, generatePLYFile, generateJSONFile, generateCSVFile, Point, ExportOptions as FileExportOptions } from "@/lib/file-generators"
 import { DetectedGeometry } from "@/lib/geometry-detection"
-import { Search, Scan, Activity } from "lucide-react"
+import { Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { PartsToolbar } from "@/components/parts-toolbar"
 import { exportScene } from "@/lib/scene-export"
 
 export interface AppSettings {
@@ -38,6 +36,15 @@ export interface AppSettings {
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [mainModel, setMainModel] = useState<File | null>(null) // Main test model
+  const [selectedParts, setSelectedParts] = useState<Array<{
+    id: string
+    type: string
+    position: [number, number, number]
+    rotation: [number, number, number]
+    scale: [number, number, number]
+    timestamp: number
+  }>>([]) // Parts placed on main model
   const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
@@ -50,12 +57,6 @@ export default function Home() {
   const [exportProgress, setExportProgress] = useState(0)
   const [detectedGeometries, setDetectedGeometries] = useState<DetectedGeometry[]>([])
   const [showDetectedGeometries, setShowDetectedGeometries] = useState(true)
-  const [analysisData, setAnalysisData] = useState<{
-    fileInfo: { name: string; size: number; format: string }
-    geometryStats: { vertices: number; faces: number; volume: number }
-    pointStats: { total: number; distribution: Record<string, number> }
-    detectionStats?: { total: number; algorithms: Record<string, number>; confidence: number }
-  } | null>(null)
   const [measurements, setMeasurements] = useState<Array<{
     id: string
     type: "distance" | "angle" | "area" | "volume" | "radius" | "diameter"
@@ -152,25 +153,12 @@ export default function Home() {
     (file: File) => {
       setUploadedFile(file)
 
-      // Analyze file and generate statistics
+      // Simplified file info without heavy analysis
       const fileInfo = {
         name: file.name,
         size: file.size,
         format: file.name.split('.').pop()?.toUpperCase() || 'Unknown'
       }
-
-      // Simulate geometry analysis
-      const geometryStats = {
-        vertices: Math.floor(Math.random() * 50000) + 10000,
-        faces: Math.floor(Math.random() * 100000) + 20000,
-        volume: Math.random() * 1000 + 100
-      }
-
-      setAnalysisData({
-        fileInfo,
-        geometryStats,
-        pointStats: { total: 0, distribution: {} }
-      })
 
       // Auto-save if enabled
       if (settings.autoSave) {
@@ -178,14 +166,13 @@ export default function Home() {
           fileName: file.name,
           uploadTime: new Date().toISOString(),
           fileSize: file.size,
-          analysis: { fileInfo, geometryStats }
         }
         localStorage.setItem("scan-ladder-last-project", JSON.stringify(projectData))
       }
 
       toast({
         title: "File Uploaded Successfully",
-        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) analyzed and loaded.`,
+        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) loaded.`,
       })
 
       // Auto-open mobile bottom sheet on file upload
@@ -204,48 +191,24 @@ export default function Home() {
     (point: { id: string; position: [number, number, number]; type: string; timestamp: number; modelType?: string }) => {
       // If a part is selected, we are in placement mode
       if (activePart) {
-        // First point for this part
-        if (!pendingGroup || pendingGroup.part !== activePart) {
-          const groupId = `group-${Date.now()}`
-          const newPoint: Point = {
-            id: point.id,
-            position: point.position,
-            type: activePart as Point['type'],
-            timestamp: point.timestamp,
-            groupId,
-            metadata: {
-              algorithm: "manual_selection"
-            }
-          }
-          setSelectedPoints(prev => [...prev, newPoint])
-          setPendingGroup({ part: activePart, groupId })
-          toast({
-            title: "First Anchor Set",
-            description: `Point 1 placed for ${activePart}. Select Point 2.`
-          })
-          return
+        // Add the part at the clicked position
+        const newPart = {
+          id: `part-${Date.now()}-${Math.random()}`,
+          type: activePart,
+          position: point.position,
+          rotation: [0, 0, 0] as [number, number, number],
+          scale: [1, 1, 1] as [number, number, number],
+          timestamp: Date.now()
         }
-        // Second point completes the group
-        if (pendingGroup && pendingGroup.part === activePart) {
-          const newPoint: Point = {
-            id: point.id,
-            position: point.position,
-            type: activePart as Point['type'],
-            timestamp: point.timestamp,
-            groupId: pendingGroup.groupId,
-            metadata: {
-              algorithm: "manual_selection"
-            }
-          }
-          setSelectedPoints(prev => [...prev, newPoint])
-          setPendingGroup(null)
-          setActivePart(null) // Reset selection
-          toast({
-            title: "Part Placed",
-            description: `${activePart} connected between the two points.`
-          })
-          return
-        }
+        
+        setSelectedParts(prev => [...prev, newPart])
+        setActivePart(null) // Reset selection
+        
+        toast({
+          title: "Part Placed",
+          description: `${activePart} part placed at the selected position.`,
+        })
+        return
       }
 
       // Check if point already exists
@@ -285,23 +248,8 @@ export default function Home() {
         
         setSelectedPoints(prev => [...prev, newPoint])
       }
-      
-      // Update analysis data
-      if (analysisData) {
-        const distribution: Record<string, number> = {}
-        const currentPoints = existingPointIndex !== -1 ? selectedPoints : [...selectedPoints, point]
-        currentPoints.forEach(p => {
-          const type = p.type || 'unknown'
-          distribution[type] = (distribution[type] || 0) + 1
-        })
-        
-        setAnalysisData(prev => prev ? {
-          ...prev,
-          pointStats: { total: currentPoints.length, distribution }
-        } : null)
-      }
     },
-    [uploadedFile, analysisData, selectedPoints, activePart, pendingGroup, toast]
+    [uploadedFile, selectedPoints, activePart, toast]
   )
 
   const clearAllPoints = useCallback(() => {
@@ -311,19 +259,11 @@ export default function Home() {
       localStorage.removeItem("scan-ladder-points")
     }
     
-    // Update analysis data
-    if (analysisData) {
-      setAnalysisData(prev => prev ? {
-        ...prev,
-        pointStats: { total: 0, distribution: {} }
-      } : null)
-    }
-    
     toast({
       title: "Points Cleared",
       description: `Removed ${pointCount} selection points`,
     })
-  }, [selectedPoints.length, toast, settings.autoSave, analysisData])
+  }, [selectedPoints.length, toast, settings.autoSave])
 
   const clearSelectedPoint = useCallback(
     (id: string) => {
@@ -351,172 +291,178 @@ export default function Home() {
       compression: boolean
       metadata: boolean
       units: "mm" | "cm" | "inches"
-      includeNormals?: boolean
-      includeColors?: boolean
-      precision?: number
     }) => {
       setIsExporting(true)
       setExportProgress(0)
 
       try {
-        // Simulate realistic export progress
-        const progressSteps = [
-          { step: "Preparing geometry...", progress: 10 },
-          { step: "Processing points...", progress: 25 },
-          { step: "Generating cylinders...", progress: 45 },
-          { step: "Merging components...", progress: 65 },
-          { step: "Optimizing mesh...", progress: 80 },
-          { step: "Finalizing export...", progress: 95 },
-          { step: "Complete!", progress: 100 },
-        ]
-
-        for (const { step, progress } of progressSteps) {
-          setExportProgress(progress)
-          await new Promise((resolve) => setTimeout(resolve, isMobile ? 300 : 500))
-        }
-
-        // Generate actual file content based on format
-        let fileContent: string
-        let mimeType: string
-        const filename = `scan-ladder-export-${Date.now()}`
-
         const exportOptions: FileExportOptions = {
-          ...options,
-          includeNormals: options.includeNormals ?? false,
-          includeColors: options.includeColors ?? false,
+          format: options.format,
+          quality: options.quality,
+          includeOriginal: options.includeOriginal,
+          includeCylinders: true,
+          compression: false,
+          metadata: true,
+          units: settings.units,
+          includeNormals: false,
+          includeColors: false,
           includeTextures: false,
-          precision: options.precision ?? 6,
+          precision: 6,
           optimization: "none"
         }
 
+        let data: string | ArrayBuffer
+        let mimeType: string
+        let extension: string
+
         switch (options.format) {
           case "stl":
-            fileContent = generateSTLFile(selectedPoints, uploadedFile, exportOptions)
-            mimeType = "application/sla"
+            data = generateSTLFile(selectedPoints, uploadedFile, exportOptions)
+            mimeType = "application/octet-stream"
+            extension = "stl"
             break
           case "obj":
-            fileContent = generateOBJFile(selectedPoints, uploadedFile, exportOptions)
-            mimeType = "application/obj"
+            data = generateOBJFile(selectedPoints, uploadedFile, exportOptions)
+            mimeType = "text/plain"
+            extension = "obj"
             break
           case "ply":
-            fileContent = generatePLYFile(selectedPoints, uploadedFile, exportOptions)
-            mimeType = "application/ply"
+            data = generatePLYFile(selectedPoints, uploadedFile, exportOptions)
+            mimeType = "text/plain"
+            extension = "ply"
             break
           case "json":
-            fileContent = generateJSONFile(selectedPoints, uploadedFile, exportOptions)
+            data = generateJSONFile(selectedPoints, uploadedFile, exportOptions)
             mimeType = "application/json"
+            extension = "json"
             break
           case "csv":
-            fileContent = generateCSVFile(selectedPoints, uploadedFile, exportOptions)
+            data = generateCSVFile(selectedPoints, uploadedFile, exportOptions)
             mimeType = "text/csv"
+            extension = "csv"
             break
           default:
             throw new Error("Unsupported format")
         }
 
+        setExportProgress(50)
+
         // Create and download file
-        const blob = new Blob([fileContent], { type: mimeType })
+        const blob = new Blob([data], { type: mimeType })
         const url = URL.createObjectURL(blob)
-        const element = document.createElement("a")
-        element.href = url
-        element.download = `${filename}.${options.format}`
-        document.body.appendChild(element)
-        element.click()
-        document.body.removeChild(element)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = `scan-ladder-export.${extension}`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
         URL.revokeObjectURL(url)
 
-        // Save export history
-        const exportHistory = JSON.parse(localStorage.getItem("scan-ladder-export-history") || "[]")
-        exportHistory.unshift({
-          id: Date.now().toString(),
-          filename: `${filename}.${options.format}`,
-          format: options.format,
-          timestamp: new Date().toISOString(),
-          pointCount: selectedPoints.length,
-          fileSize: blob.size,
-          options,
-        })
-        localStorage.setItem("scan-ladder-export-history", JSON.stringify(exportHistory.slice(0, 10)))
+        setExportProgress(100)
+        setIsExporting(false)
+        setExportModalOpen(false)
 
         toast({
-          title: "Export Successful",
-          description: `${filename}.${options.format} (${(blob.size / 1024).toFixed(1)} KB) has been downloaded.`,
+          title: "Export Complete",
+          description: `File exported as ${options.format.toUpperCase()}`,
         })
-
-        setExportModalOpen(false)
       } catch (error) {
         console.error("Export error:", error)
+        setIsExporting(false)
         toast({
           title: "Export Failed",
-          description: "There was an error generating the export file. Please try again.",
+          description: "Failed to export file. Please try again.",
           variant: "destructive",
         })
-      } finally {
-        setIsExporting(false)
-        setExportProgress(0)
       }
     },
-    [selectedPoints, uploadedFile, toast, isMobile],
+    [selectedPoints, settings.units, toast]
   )
 
-  // Camera control handlers - now handled in sidebar
-  const handleToggleGrid = useCallback(() => {
-    updateSettings({ showGrid: !settings.showGrid })
-  }, [settings.showGrid, updateSettings])
-
-  const handleToggleAxes = useCallback(() => {
-    updateSettings({ showAxes: !settings.showAxes })
-  }, [settings.showAxes, updateSettings])
-
-  const handleSettingsOpen = useCallback(() => {
-    setSettingsModalOpen(true)
-    // Close mobile nav if open
-    if (isMobile) {
-      setMobileNavOpen(false)
-    }
-  }, [isMobile])
-
-  const handleInfoOpen = useCallback(() => {
-    setInfoModalOpen(true)
-    // Close mobile nav if open
-    if (isMobile) {
-      setMobileNavOpen(false)
-    }
-  }, [isMobile])
-
-  const handleMobileNavOpen = useCallback(() => {
-    setMobileNavOpen(true)
-  }, [])
-
+  // Optimized handlers
+  const handleSettingsOpen = useCallback(() => setSettingsModalOpen(true), [])
+  const handleInfoOpen = useCallback(() => setInfoModalOpen(true), [])
+  const handleMobileNavOpen = useCallback(() => setMobileNavOpen(true), [])
   const handleFileUploadTrigger = useCallback(() => {
-    // This will trigger the file input in the header
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-    if (fileInput) {
-      fileInput.click()
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".stl"
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) handleFileUpload(file)
     }
-  }, [])
+    input.click()
+  }, [handleFileUpload])
 
-  // Measurement handlers
-  const handleAddMeasurement = useCallback((measurement: Omit<typeof measurements[0], 'id' | 'timestamp'>) => {
-    const newMeasurement = {
-      ...measurement,
-      id: `measurement-${Date.now()}`,
-      timestamp: Date.now()
-    }
-    setMeasurements(prev => [...prev, newMeasurement])
-  }, [])
+  // Handle main test model selection from sidebar
+  const handleTestModelSelect = useCallback((testModelName: string) => {
+    const modelPath = `/models/${testModelName}`
+    
+    // Fetch the actual file to preserve size and properties
+    fetch(modelPath)
+      .then(response => response.blob())
+      .then(blob => {
+        const modelFile = new File([blob], testModelName, { 
+          type: 'model/stl',
+          lastModified: Date.now()
+        })
+        setMainModel(modelFile) // Set as main model instead of uploaded file
+        setUploadedFile(null) // Clear any uploaded file
+        
+        toast({
+          title: "Main Model Loaded",
+          description: `Loaded ${testModelName} as main model`,
+        })
+      })
+      .catch(error => {
+        console.error("Error loading test model:", error)
+        toast({
+          title: "Error Loading Test Model",
+          description: "Failed to load the selected test model",
+          variant: "destructive",
+        })
+      })
+  }, [toast])
 
-  const handleUpdateMeasurement = useCallback((id: string, updates: Partial<typeof measurements[0]>) => {
-    setMeasurements(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m))
-  }, [])
-
-  const handleDeleteMeasurement = useCallback((id: string) => {
-    setMeasurements(prev => prev.filter(m => m.id !== id))
-  }, [])
-
-  const handleClearAllMeasurements = useCallback(() => {
-    setMeasurements([])
-  }, [])
+  // Handle part selection from sidebar - now places parts on main model
+  const handleModelSelect = useCallback((modelName: string) => {
+    const modelPath = `/models/${modelName}.stl`
+    
+    // Fetch the actual file to preserve size and properties
+    fetch(modelPath)
+      .then(response => response.blob())
+      .then(blob => {
+        const partFile = new File([blob], `${modelName}.stl`, { 
+          type: 'model/stl',
+          lastModified: Date.now()
+        })
+        
+        // Add part to selected parts array
+        const newPart = {
+          id: `part-${Date.now()}-${Math.random()}`,
+          type: modelName,
+          position: [0, 0, 0] as [number, number, number],
+          rotation: [0, 0, 0] as [number, number, number],
+          scale: [1, 1, 1] as [number, number, number],
+          timestamp: Date.now()
+        }
+        
+        setSelectedParts(prev => [...prev, newPart])
+        
+        toast({
+          title: "Part Added",
+          description: `${modelName} part added to scene. Click to place it on the main model.`,
+        })
+      })
+      .catch(error => {
+        console.error("Error loading model:", error)
+        toast({
+          title: "Error Loading Model",
+          description: "Failed to load the selected model",
+          variant: "destructive",
+        })
+      })
+  }, [toast])
 
   // Handle scan selection from sidebar
   const handleScanSelect = useCallback((scanId: string) => {
@@ -550,33 +496,11 @@ export default function Home() {
   const handleGeometriesDetected = useCallback((geometries: DetectedGeometry[]) => {
     setDetectedGeometries(geometries)
     
-    // Update analysis data with detection stats
-    if (analysisData) {
-      const algorithms: Record<string, number> = {}
-      let totalConfidence = 0
-      
-      geometries.forEach(geom => {
-        algorithms[geom.algorithm] = (algorithms[geom.algorithm] || 0) + 1
-        totalConfidence += geom.confidence
-      })
-      
-      const avgConfidence = geometries.length > 0 ? totalConfidence / geometries.length : 0
-      
-      setAnalysisData(prev => prev ? {
-        ...prev,
-        detectionStats: {
-          total: geometries.length,
-          algorithms,
-          confidence: avgConfidence
-        }
-      } : null)
-    }
-
     toast({
       title: "Geometry Detection Complete",
-      description: `Detected ${geometries.length} geometric features using ICP and feature analysis`,
+      description: `Detected ${geometries.length} geometric features`,
     })
-  }, [analysisData, toast])
+  }, [toast])
 
   // Toggle visibility of detected geometries
   const handleToggleDetectedGeometries = useCallback(() => {
@@ -622,17 +546,37 @@ export default function Home() {
   // Clear detected geometries
   const handleClearDetectedGeometries = useCallback(() => {
     setDetectedGeometries([])
-    if (analysisData) {
-      setAnalysisData(prev => prev ? {
-        ...prev,
-        detectionStats: { total: 0, algorithms: {}, confidence: 0 }
-      } : null)
-    }
     toast({
       title: "Detections Cleared",
       description: "All detected geometries have been removed",
     })
-  }, [analysisData, toast])
+  }, [toast])
+
+  // Optimized measurement handlers
+  const handleAddMeasurement = useCallback((measurement: any) => {
+    setMeasurements(prev => [...prev, measurement])
+  }, [])
+
+  const handleUpdateMeasurement = useCallback((id: string, updates: any) => {
+    setMeasurements(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m))
+  }, [])
+
+  const handleDeleteMeasurement = useCallback((id: string) => {
+    setMeasurements(prev => prev.filter(m => m.id !== id))
+  }, [])
+
+  const handleClearAllMeasurements = useCallback(() => {
+    setMeasurements([])
+  }, [])
+
+  // Optimized grid and axes handlers
+  const handleToggleGrid = useCallback(() => {
+    setSettings(prev => ({ ...prev, showGrid: !prev.showGrid }))
+  }, [])
+
+  const handleToggleAxes = useCallback(() => {
+    setSettings(prev => ({ ...prev, showAxes: !prev.showAxes }))
+  }, [])
 
   // Make file upload handler available globally for sidebar
   useEffect(() => {
@@ -671,6 +615,16 @@ export default function Home() {
     }
   }, [activePart, scene3D, toast])
 
+  // Memoized file info for performance
+  const fileInfo = useMemo(() => {
+    if (!mainModel) return null
+    return {
+      name: mainModel.name,
+      size: mainModel.size,
+      format: mainModel.name.split('.').pop()?.toUpperCase() || 'Unknown'
+    }
+  }, [mainModel])
+
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />
   }
@@ -678,47 +632,20 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-gray-100 overflow-hidden">
       <Header
-        onFileUpload={handleFileUpload}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        uploadedFile={uploadedFile}
-        selectedPointsCount={selectedPoints.length}
         isMobile={isMobile}
-        onSettingsOpen={handleSettingsOpen}
-        onInfoOpen={handleInfoOpen}
-        onMobileNavOpen={handleMobileNavOpen}
-        settings={settings}
       />
 
       <div className={`flex-1 flex overflow-hidden relative ${isMobile ? "pt-12" : "pt-14"}`}>
         {/* Desktop/Tablet Sidebar */}
         {!isMobile && (
           <Sidebar
-            selectedPoints={selectedPoints}
-            onClearAllPoints={clearAllPoints}
-            onClearSelectedPoint={clearSelectedPoint}
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
-            exportType={exportType}
-            onExportTypeChange={setExportType}
-            onExport={() => setExportModalOpen(true)}
-            hasFile={!!uploadedFile}
+            onModelSelect={handleModelSelect}
+            onTestModelSelect={handleTestModelSelect}
             isMobile={false}
-            settings={settings}
-            uploadedFile={uploadedFile}
-            measurements={measurements}
-            onAddMeasurement={handleAddMeasurement}
-            onUpdateMeasurement={handleUpdateMeasurement}
-            onDeleteMeasurement={handleDeleteMeasurement}
-            onClearAllMeasurements={handleClearAllMeasurements}
-            onScanSelect={handleScanSelect}
-            onToggleGrid={handleToggleGrid}
-            onToggleAxes={handleToggleAxes}
-            matchedShapes={detectedGeometries}
-            showMatches={showDetectedGeometries}
-            onToggleMatches={handleToggleDetectedGeometries}
-            onAutoPlacePoints={handleAutoPlacePoints}
-            onClearDetectedGeometries={handleClearDetectedGeometries}
           />
         )}
 
@@ -734,7 +661,7 @@ export default function Home() {
             }`}
           >
             <STLViewer
-              file={uploadedFile}
+              file={mainModel || uploadedFile} // Use main model if available, otherwise uploaded file
               onPointSelect={handlePointSelect}
               selectedPoints={selectedPoints}
               exportType={exportType}
@@ -750,46 +677,31 @@ export default function Home() {
               showDetectedGeometries={showDetectedGeometries}
               detectedGeometries={detectedGeometries}
               onSceneReady={setScene3D}
+              selectedParts={selectedParts} // Pass selected parts to viewer
             />
             
             {/* Parts selection toolbar */}
             {!isMobile && (
-              <PartsToolbar activePart={activePart} onSelectPart={setActivePart} />
+              <PartsToolbar 
+                activePart={activePart} 
+                onSelectPart={setActivePart} 
+              />
             )}
 
-            {/* Quick Access Panel - Compact */}
-            {!isMobile && (
-              <div className="absolute top-2 left-2 flex flex-col space-y-1">
-                {/* AI Match and Pro View buttons removed */}
-              </div>
-            )}
-
-            {/* Analysis Panel - Compact */}
-            {analysisData && !isMobile && (
+            {/* Simplified File Info Panel */}
+            {fileInfo && !isMobile && (
               <div className="absolute bottom-2 left-2 bg-white/95 backdrop-blur-sm rounded-md p-2 shadow-lg max-w-xs border border-gray-200">
                 <div className="text-xs space-y-1">
                   <div className="font-semibold flex items-center space-x-1 text-gray-800">
                     <Activity className="w-3 h-3 text-blue-500" />
-                    <span>Analysis</span>
+                    <span>Main Model</span>
                   </div>
                   <div className="text-xs text-gray-600 space-y-0.5">
-                    <div><span className="font-medium">File:</span> {analysisData.fileInfo.name}</div>
-                    <div><span className="font-medium">Format:</span> {analysisData.fileInfo.format}</div>
-                    <div><span className="font-medium">Size:</span> {(analysisData.fileInfo.size / 1024 / 1024).toFixed(2)} MB</div>
-                    <div><span className="font-medium">Vertices:</span> {analysisData.geometryStats.vertices.toLocaleString()}</div>
-                    <div><span className="font-medium">Faces:</span> {analysisData.geometryStats.faces.toLocaleString()}</div>
+                    <div><span className="font-medium">File:</span> {fileInfo.name}</div>
+                    <div><span className="font-medium">Format:</span> {fileInfo.format}</div>
+                    <div><span className="font-medium">Size:</span> {(fileInfo.size / 1024 / 1024).toFixed(2)} MB</div>
+                    <div><span className="font-medium">Parts:</span> {selectedParts.length}</div>
                     <div><span className="font-medium">Points:</span> {selectedPoints.length}</div>
-                    {selectedPoints.length > 0 && analysisData.pointStats.distribution && (
-                      <div className="mt-1 pt-1 border-t border-gray-200">
-                        <div className="font-medium text-gray-700 mb-0.5">Distribution:</div>
-                        {Object.entries(analysisData.pointStats.distribution)
-                          .map(([type, count]) => (
-                            <div key={type} className="text-xs">
-                              {type}: {count}
-                            </div>
-                          ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

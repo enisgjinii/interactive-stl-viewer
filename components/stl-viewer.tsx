@@ -45,6 +45,14 @@ interface STLViewerProps {
   showDetectedGeometries?: boolean
   detectedGeometries?: DetectedGeometry[]
   onSceneReady?: (scene: THREE.Scene) => void
+  selectedParts?: Array<{
+    id: string
+    type: string
+    position: [number, number, number]
+    rotation: [number, number, number]
+    scale: [number, number, number]
+    timestamp: number
+  }>
 }
 
 // Global in-memory cache so the same STL file isn't parsed more than once per session
@@ -262,7 +270,7 @@ function STLModel({
         
         toast({
           title: "Model Loaded",
-          description: `STL file loaded: ${vertexCount} vertices, ${Math.floor(faceCount)} faces`,
+          description: `STL file loaded successfully`,
         })
         
         // Auto-fit camera to model
@@ -605,7 +613,7 @@ function ModelMockups({
       try {
         const geometry = await loader.loadAsync(`/models/${model.id}.stl`)
         geometry.center()
-        const scale = 0.08 // Smaller scale for better visibility
+        const scale = 0.15 // Increased scale for better visibility (was 0.08)
         geometry.scale(scale, scale, scale)
         setModelGeometries(prev => ({
           ...prev,
@@ -747,13 +755,13 @@ function DefaultScene({ isMobile, settings, onPointSelect }: { isMobile: boolean
 
   return (
     <group>
-      {/* Enhanced mock dental scan bodies - smaller sizes */}
+      {/* Enhanced mock dental scan bodies - larger sizes */}
       {[
-        { pos: [0, 0, 0], color: "#e8c4a0", label: "Upper Left", size: 0.5 },
-        { pos: [1.5, 0, 0.5], color: "#e8c4a0", label: "Upper Right", size: 0.45 },
-        { pos: [-1.5, 0, 0.5], color: "#e8c4a0", label: "Lower Left", size: 0.4 },
-        { pos: [0, 0, 1.5], color: "#e8c4a0", label: "Lower Right", size: 0.55 },
-        { pos: [0.8, 0, -0.8], color: "#e8c4a0", label: "Molar", size: 0.35 },
+        { pos: [0, 0, 0], color: "#e8c4a0", label: "Upper Left", size: 0.8 },
+        { pos: [1.5, 0, 0.5], color: "#e8c4a0", label: "Upper Right", size: 0.75 },
+        { pos: [-1.5, 0, 0.5], color: "#e8c4a0", label: "Lower Left", size: 0.7 },
+        { pos: [0, 0, 1.5], color: "#e8c4a0", label: "Lower Right", size: 0.85 },
+        { pos: [0.8, 0, -0.8], color: "#e8c4a0", label: "Molar", size: 0.65 },
       ].map((item, index) => (
         <group key={index} position={item.pos as [number, number, number]}>
           <mesh 
@@ -1000,6 +1008,74 @@ function CameraControls({
   return null
 }
 
+function PartsOverlay({ 
+  selectedParts, 
+  onPartClick 
+}: { 
+  selectedParts: Array<{
+    id: string
+    type: string
+    position: [number, number, number]
+    rotation: [number, number, number]
+    scale: [number, number, number]
+    timestamp: number
+  }>
+  onPartClick?: (partId: string) => void
+}) {
+  const [partModels, setPartModels] = useState<{[key: string]: THREE.Group}>({})
+
+  useEffect(() => {
+    // Load part models
+    selectedParts.forEach(part => {
+      if (!partModels[part.type]) {
+        const loader = new STLLoader()
+        fetch(`/models/${part.type}.stl`)
+          .then(response => response.arrayBuffer())
+          .then(buffer => {
+            const geometry = loader.parse(buffer)
+            const material = new THREE.MeshStandardMaterial({ 
+              color: 0x3b82f6, 
+              transparent: true, 
+              opacity: 0.8,
+              metalness: 0.1,
+              roughness: 0.8
+            })
+            const mesh = new THREE.Mesh(geometry, material)
+            const group = new THREE.Group()
+            group.add(mesh)
+            setPartModels(prev => ({ ...prev, [part.type]: group }))
+          })
+          .catch(error => {
+            console.error(`Error loading part model ${part.type}:`, error)
+          })
+      }
+    })
+  }, [selectedParts, partModels])
+
+  return (
+    <>
+      {selectedParts.map(part => {
+        const model = partModels[part.type]
+        if (!model) return null
+
+        return (
+          <primitive
+            key={part.id}
+            object={model.clone()}
+            position={part.position}
+            rotation={part.rotation}
+            scale={part.scale}
+            onClick={(event) => {
+              event.stopPropagation()
+              onPartClick?.(part.id)
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
 const SceneCapture = ({ onReady }: { onReady?: (scene: THREE.Scene) => void }) => {
   const { scene } = useThree()
   useEffect(() => {
@@ -1025,6 +1101,7 @@ export function STLViewer({
   showDetectedGeometries = true,
   detectedGeometries = [],
   onSceneReady,
+  selectedParts = [],
 }: STLViewerProps) {
   const [url, setUrl] = useState<string | null>(null)
   const controlsRef = useRef<any>(null)
@@ -1052,7 +1129,7 @@ export function STLViewer({
           camera={{ position: [5, 5, 5], fov: 50 }}
           className="bg-gradient-to-br from-gray-50 to-gray-100"
         >
-          <Suspense fallback={<LoadingFallback isMobile={isMobile} />}>
+          <Suspense fallback={< LoadingFallback isMobile={isMobile} />}>
             <OrbitControls
               ref={controlsRef}
               enableDamping
@@ -1095,6 +1172,18 @@ export function STLViewer({
             ) : (
               <DefaultScene isMobile={isMobile} settings={settings} onPointSelect={onPointSelect} />
             )}
+            
+            {/* Render selected parts as overlays */}
+            {selectedParts.length > 0 && (
+              <PartsOverlay 
+                selectedParts={selectedParts}
+                onPartClick={(partId) => {
+                  console.log('Part clicked:', partId)
+                  // Handle part selection/editing here
+                }}
+              />
+            )}
+            
             {selectedPoints.length > 0 && (
               <ModelMockups
                 selectedPoints={selectedPoints}
